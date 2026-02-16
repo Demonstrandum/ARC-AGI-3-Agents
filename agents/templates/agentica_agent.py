@@ -1,0 +1,254 @@
+import asyncio
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+from agentica import spawn
+from agentica.common import ReasoningEffort
+from agentica.logging import AgentListener, set_default_agent_listener
+from arcengine import FrameData, GameAction, GameState
+
+from arcgentica import EventServer, WsLogger
+from arcgentica.frame import Frame
+from arcgentica.game_ref import GAME_REFERENCE, SYSTEM_PROMPT
+
+from ..agent import Agent
+from ..tracing import trace_agent_session
+
+logger = logging.getLogger()
+
+MAIN_AGENT_MODEL: str = "anthropic/claude-opus-4-6"
+SUBAGENT_MODEL: str = "anthropic/claude-opus-4-6"
+REASONING_EFFORT: ReasoningEffort = "high"
+
+
+class Agentica(Agent):
+    """Agent that uses the Agentica SDK with a submit_action tool.
+
+    Calls the LLM once — the LLM drives the game by calling
+    submit_action repeatedly within a single agent.call() invocation.
+    """
+
+    MAX_ACTIONS = 800
+
+    def __init__(self, *args: Any, visualize: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.visualize = visualize or os.environ.get("VISUALIZE", "") == "1"
+        self._server: EventServer | None = None
+        self._action_log_dir: Path | None = None
+        self._action_log_file: Any = None
+        self._logged_level: int = -1
+
+    def _log_action(self, action: GameAction, frame: Frame) -> None:
+        """Append one JSONL line per action. Rotates file on level change."""
+        if self._action_log_dir is None:
+            self._action_log_dir = Path("actions_log") / self.game_id
+            self._action_log_dir.mkdir(parents=True, exist_ok=True)
+
+        level = frame.levels_completed
+        if level != self._logged_level:
+            if self._action_log_file is not None:
+                self._action_log_file.close()
+            path = self._action_log_dir / f"level_{level}.jsonl"
+            self._action_log_file = open(path, "a")
+            self._logged_level = level
+
+        entry = {
+            "action": action.name,
+            "count": self.action_counter,
+            "level": level,
+            "state": frame.state.name,
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        if action.is_complex():
+            entry["x"] = action.action_data.x
+            entry["y"] = action.action_data.y
+
+        self._action_log_file.write(json.dumps(entry) + "\n")
+        self._action_log_file.flush()
+
+    def _close_action_log(self) -> None:
+        if self._action_log_file is not None:
+            self._action_log_file.close()
+            self._action_log_file = None
+
+    # Required abstract methods (not used since we override main)
+    def is_done(self, frames: list[FrameData], latest_frame: FrameData) -> bool:
+        return latest_frame.state is GameState.WIN
+
+    def choose_action(
+        self, frames: list[FrameData], latest_frame: FrameData
+    ) -> GameAction:
+        raise NotImplementedError("Agentica agent overrides main()")
+
+    def _make_submit_action(self, server: EventServer | None = None):
+        """Create the submit_action tool function for the agentica agent."""
+
+        last_available: list[int] = []
+        # True when a non-RESET action has been taken since the last reset.
+        # When False, the engine's _action_count is 0 and a RESET would
+        # trigger a destructive full_reset back to level 0.
+        has_moves_since_reset: bool = False
+        last_frame: Frame | None = None
+
+        def _push_frame(action: GameAction, raw: FrameData) -> Frame:
+            nonlocal last_available, has_moves_since_reset, last_frame
+            last_available = raw.available_actions
+            self.append_frame(raw)
+            self.action_counter += 1
+            if action is not GameAction.RESET:
+                has_moves_since_reset = True
+            else:
+                has_moves_since_reset = False
+            logger.info(
+                f"{self.game_id} - {action.name}: count {self.action_counter}, "
+                f"level {raw.levels_completed}/{raw.win_levels}"
+            )
+            frame = Frame(raw)
+            last_frame = frame
+            self._log_action(action, frame)
+            if server is not None:
+                cx = action.action_data.x if action.is_complex() else None
+                cy = action.action_data.y if action.is_complex() else None
+                server.push_game_action(
+                    action.name,
+                    frame,
+                    self.action_counter,
+                    click_x=cx,
+                    click_y=cy,
+                )
+            return frame
+
+        def submit_action(action_name: str, x: int = 0, y: int = 0) -> Frame:
+            """Submit a game action and receive the new frame.
+
+            Args:
+                action_name: One of RESET, ACTION1-ACTION6
+                x: X coordinate (0-63), only for ACTION6
+                y: Y coordinate (0-63), only for ACTION6
+
+            Returns:
+                Frame with the new game state, grid, and available actions.
+            """
+            action = GameAction.from_name(action_name)
+
+            if (
+                last_available
+                and action is not GameAction.RESET
+                and action.value not in last_available
+            ):
+                allowed = [GameAction.from_id(a).name for a in last_available]
+                raise ValueError(
+                    f"{action.name} is not available. Available actions: {allowed}"
+                )
+
+            # Block redundant RESETs that would cause a full game reset.
+            # The engine does full_reset when _action_count==0, which is
+            # the case right after any level_reset or level transition.
+            # Since no moves were taken, the level is already clean — just
+            # return the current frame.
+            if action is GameAction.RESET and not has_moves_since_reset:
+                if last_frame is not None:
+                    logger.info(f"{self.game_id} - RESET skipped (level already clean)")
+                    return last_frame
+
+            if action.is_complex():
+                action.set_data({"x": x, "y": y})
+
+            raw = self.take_action(action)
+
+            # Session may have gone stale — RESET and retry once
+            if raw is None and action is not GameAction.RESET:
+                logger.warning(
+                    f"{self.game_id} - {action.name} failed, "
+                    "resetting session and retrying"
+                )
+                reset_raw = self.take_action(GameAction.RESET)
+                if reset_raw:
+                    self.append_frame(reset_raw)
+                    self.action_counter += 1
+                raw = self.take_action(action)
+
+            if raw:
+                return _push_frame(action, raw)
+
+            raise ValueError("Action failed — no frame returned.")
+
+        return submit_action
+
+    async def spawn_agent(self, system_prompt: str | None = None):
+        """Spawn a new subagent that can be called repeatedly.
+
+        Returns an agent handle. Use ``await agent.call(return_type, task, **objects)``
+        to invoke it.  The same handle can be called multiple times — each call
+        continues the conversation so the agent retains context from prior calls.
+        Pass ``submit_action`` only to agents that need to take game actions.
+
+        Be careful about when you wan't to reuse context vs. spawn a new agent,
+        performance degrades as context grows, so there is a trade-off you have to consider.
+        """
+        return await spawn(
+            model=SUBAGENT_MODEL,
+            premise=system_prompt,
+            reasoning_effort=REASONING_EFFORT,
+            scope={
+                "spawn_agent": self.spawn_agent,
+            },
+        )
+
+    async def _run(self) -> None:
+        """Async entry point: spawn agentica agent and let it play."""
+        server: EventServer | None = None
+        if self.visualize:
+            server = EventServer(game_id=self.game_id)
+            await server.start()
+            self._server = server
+            set_default_agent_listener(lambda: AgentListener(WsLogger(server)))
+        else:
+            set_default_agent_listener(None)
+
+        submit_action = self._make_submit_action(server=server)
+
+        # Double RESET guarantees a completely fresh game
+        initial_raw = self.take_action(GameAction.RESET)
+        if initial_raw:
+            self.append_frame(initial_raw)
+            self.action_counter += 1
+
+        initial_frame = submit_action("RESET")
+
+        orchestrator = await spawn(
+            model=MAIN_AGENT_MODEL,
+            premise=SYSTEM_PROMPT,
+            reasoning_effort=REASONING_EFFORT,
+            scope={
+                "spawn_agent": self.spawn_agent,
+            },
+        )
+        remaining = self.MAX_ACTIONS - self.action_counter
+        return await orchestrator.call(
+            None,
+            f"Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
+            f"You have {remaining} actions remaining. "
+            "Start by spawning an explorer subagent — give it `submit_action`, "
+            "`initial_frame`, and `GAME_REFERENCE`. "
+            "Do NOT inspect the frame or call submit_action yourself.",
+            initial_frame=initial_frame,
+            submit_action=submit_action,
+            GAME_REFERENCE=GAME_REFERENCE,
+        )
+
+    @trace_agent_session
+    def main(self) -> None:
+        """Override the base agent loop — agentica drives the game."""
+        self.timer = time.time()
+        try:
+            asyncio.run(self._run())
+        finally:
+            self._close_action_log()
+            if self._server is not None:
+                asyncio.run(self._server.stop())
+            self.cleanup()

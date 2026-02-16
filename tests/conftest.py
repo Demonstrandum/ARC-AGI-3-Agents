@@ -2,7 +2,6 @@ import os
 import shutil
 
 import pytest
-
 from agents.structs import FrameData, GameState
 
 

@@ -12,6 +12,7 @@ from .templates.llm_agents import LLM, FastLLM, GuidedLLM, ReasoningLLM
 from .templates.multimodal import MultiModalLLM
 from .templates.random_agent import Random
 from .templates.reasoning_agent import ReasoningAgent
+from .templates.agentica_agent import Agentica
 from .templates.smolagents import SmolCodingAgent, SmolVisionAgent
 
 load_dotenv()
@@ -30,6 +31,7 @@ for rec in Recorder.list():
 AVAILABLE_AGENTS["reasoningagent"] = ReasoningAgent
 
 __all__ = [
+    "Agentica",
     "Swarm",
     "Random",
     "LangGraphFunc",

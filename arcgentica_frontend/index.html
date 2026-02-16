@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ARC-AGI-3 Visualizer</title>
+<style>
+  :root {
+    --bg: #18181b;
+    --bg-surface: #27272a;
+    --bg-elevated: #3f3f46;
+    --border: #52525b;
+    --text: #fafafa;
+    --text-muted: #a1a1aa;
+    --accent: #6366f1;
+    --accent-dim: #4f46e5;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 1fr auto;
+    height: 100vh;
+    gap: 1px;
+    background: var(--border);
+  }
+
+  /* ── Grid panel (top-left) ─────────────────────────────── */
+  #grid-panel {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    min-width: 540px;
+  }
+
+  #grid-panel header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  #grid-panel header .badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .badge-game-id {
+    background: var(--bg-surface);
+    color: var(--text);
+    font-family: var(--font-mono);
+    border: 1px solid var(--border);
+  }
+  .badge-level { background: var(--accent-dim); color: #fff; }
+  .badge-actions { background: var(--bg-elevated); }
+  .badge-state-NOT_FINISHED { background: var(--bg-elevated); }
+  .badge-state-WIN { background: #166534; color: var(--green); }
+  .badge-state-GAME_OVER { background: #7f1d1d; color: var(--red); }
+
+  #grid-canvas {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    image-rendering: pixelated;
+  }
+
+  /* ── Action buttons ────────────────────────────────────── */
+  #action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 12px;
+  }
+
+  .dpad {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .dpad-updown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: default;
+    transition: background .15s, opacity .15s, box-shadow .15s;
+    user-select: none;
+  }
+  .action-btn.circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+  .action-btn.pill {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 18px;
+    font-size: 11px;
+    font-weight: 500;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .action-btn.unavailable {
+    opacity: .25;
+  }
+  .action-btn.last-action {
+    box-shadow: 0 0 10px 2px var(--accent);
+  }
+  .action-btn.flash {
+    animation: btn-pulse .35s ease-out;
+  }
+  @keyframes btn-pulse {
+    0%   { background: var(--accent); color: #fff; transform: scale(1.15); }
+    100% { background: var(--bg-elevated); color: var(--text); transform: scale(1); }
+  }
+
+  .click-group {
+    position: relative;
+  }
+  .click-coords {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 2px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ── Agent panel (top-right) ───────────────────────────── */
+  #agent-panel {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #agent-tabs {
+    display: flex;
+    overflow-x: auto;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    scrollbar-width: thin;
+  }
+
+  #agent-tabs::-webkit-scrollbar { height: 4px; }
+  #agent-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .agent-tab {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    background: transparent;
+    transition: color .15s, border-color .15s, background .15s, opacity .15s;
+    user-select: none;
+  }
+
+  .agent-tab:hover { color: var(--text); }
+  .agent-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Dead agents (call_exit received) */
+  .agent-tab.dead {
+    opacity: .4;
+  }
+  .agent-tab.dead:hover { opacity: .7; }
+
+  /* Spinner for in-flight agents */
+  .agent-tab .spinner {
+    display: none;
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid var(--text-muted);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .agent-tab.in-flight .spinner {
+    display: inline-block;
+  }
+  .agent-tab.streaming .spinner {
+    border-color: var(--green);
+    border-top-color: transparent;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .agent-tab .parent-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 4px;
+    opacity: .7;
+  }
+
+  #agent-logs-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .agent-log {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    padding: 12px 16px;
+    display: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    scrollbar-width: thin;
+  }
+
+  .agent-log.active { display: block; }
+
+  .agent-log::-webkit-scrollbar { width: 6px; }
+  .agent-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Log blocks: each is a <pre> that accumulates streamed token chunks */
+  .log-block {
+    margin: 0;
+    padding: 0;
+    white-space: pre;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .log-separator {
+    padding: 6px 0;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  /* Collapsible user messages */
+  .user-msg-wrapper {
+    position: relative;
+  }
+  .user-msg-wrapper.collapsed .log-block {
+    max-height: calc(1.6em * 10);
+    overflow: hidden;
+  }
+  .user-msg-wrapper.collapsed .user-fade {
+    display: block;
+  }
+  .user-fade {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3em;
+    background: linear-gradient(transparent, var(--bg));
+    pointer-events: none;
+  }
+  .user-expand-btn {
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 2px 0;
+    user-select: none;
+    font-family: var(--font-mono);
+  }
+  .user-expand-btn:hover { text-decoration: underline; }
+
+  .log-block.chunk-reasoning { color: #a78bfa; opacity: .85; }
+  .code-wrapper {
+    position: relative;
+    margin: 6px 0;
+  }
+  .code-lang {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    padding: 2px 8px;
+    border-radius: 0 4px 0 4px;
+    opacity: .7;
+  }
+  .log-block.chunk-code {
+    color: var(--green);
+    background: #1e1e2e;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 0;
+    tab-size: 4;
+  }
+  .log-block.chunk-output_text { color: var(--text); }
+  .log-block.chunk-usage { color: var(--yellow); font-size: 11px; display: none; }
+
+  .usage-summary {
+    font-size: 11px;
+    color: var(--yellow);
+    opacity: .7;
+    padding: 2px 0;
+    cursor: pointer;
+    user-select: none;
+    font-family: var(--font-mono);
+  }
+  .usage-summary:hover { opacity: 1; }
+  .usage-summary.expanded + .log-block.chunk-usage { display: block; }
+  .log-block.chunk-default { color: var(--text-muted); }
+  .log-block.role-user { color: #60a5fa; }
+  .log-block.role-system { color: var(--yellow); }
+
+  /* ── Timeline (bottom, full width) ─────────────────────── */
+  #timeline-panel {
+    grid-column: 1 / -1;
+    background: var(--bg-surface);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    overflow: hidden;
+  }
+
+  #timeline-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  #timeline-track {
+    flex: 1;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  #timeline-track::-webkit-scrollbar { height: 4px; }
+  #timeline-track::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .timeline-tick {
+    width: 6px;
+    min-width: 6px;
+    height: 20px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: opacity .1s;
+    opacity: .6;
+  }
+
+  .timeline-tick:hover { opacity: 1; }
+  .timeline-tick.active { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+  .timeline-tick.state-NOT_FINISHED { background: var(--text-muted); }
+  .timeline-tick.state-WIN { background: var(--green); }
+  .timeline-tick.state-GAME_OVER { background: var(--red); }
+
+  .timeline-level-break {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--green);
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    height: 20px;
+  }
+
+  /* ── Connection status ─────────────────────────────────── */
+  #status {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    z-index: 100;
+  }
+
+  #status.connected { background: #166534; color: var(--green); }
+  #status.disconnected { background: #7f1d1d; color: var(--red); }
+  #status.connecting { background: #78350f; color: var(--yellow); }
+
+  /* ── Empty state ───────────────────────────────────────── */
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div id="status" class="connecting">Connecting...</div>
+
+<div id="app">
+  <div id="grid-panel">
+    <header>
+      <span>ARC-AGI-3</span>
+      <span class="badge badge-game-id" id="hud-game-id" style="display:none"></span>
+      <span class="badge badge-level" id="hud-level">Level ?/?</span>
+      <span class="badge badge-actions" id="hud-actions">Action #0</span>
+      <span class="badge badge-state-NOT_FINISHED" id="hud-state">NOT_FINISHED</span>
+    </header>
+    <canvas id="grid-canvas" width="512" height="512"></canvas>
+    <div id="action-buttons">
+      <div class="dpad">
+        <button class="action-btn circle unavailable" data-action="ACTION3" title="Left">&larr;</button>
+        <div class="dpad-updown">
+          <button class="action-btn circle unavailable" data-action="ACTION1" title="Up">&uarr;</button>
+          <button class="action-btn circle unavailable" data-action="ACTION2" title="Down">&darr;</button>
+        </div>
+        <button class="action-btn circle unavailable" data-action="ACTION4" title="Right">&rarr;</button>
+      </div>
+      <button class="action-btn pill unavailable" data-action="ACTION5" title="Space Bar">Space Bar</button>
+      <div class="click-group">
+        <button class="action-btn pill unavailable" data-action="ACTION6" id="click-btn" title="Click">&#9757; Click</button>
+        <span class="click-coords" id="click-coords"></span>
+      </div>
+      <button class="action-btn pill unavailable" data-action="RESET" title="Reset Level">RESET</button>
+    </div>
+  </div>
+
+  <div id="agent-panel">
+    <div id="agent-tabs"></div>
+    <div id="agent-logs-container">
+      <div class="empty-state" id="agent-empty">Waiting for agents...</div>
+    </div>
+  </div>
+
+  <div id="timeline-panel">
+    <span id="timeline-label">Timeline</span>
+    <div id="timeline-track"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════
+   State
+   ════════════════════════════════════════════════════════════ */
+
+const GRID_SIZE = 64;
+const CANVAS_PX = 512;
+const CELL_PX = CANVAS_PX / GRID_SIZE; // 8
+
+let palette = [
+  "#FFFFFF","#CCCCCC","#999999","#666666","#333333","#000000",
+  "#E53AA3","#FF7BCC","#F93C31","#1E93FF","#88D8F1",
+  "#FFDC00","#FF851B","#921231","#4FCC30","#A356D6",
+];
+
+// Timeline snapshots: array of { action, count, level, state, grid }
+const snapshots = [];
+let currentSnapshotIdx = -1;
+
+// Agent data: Map<agentId, { parentId, chunks: string[], el: HTMLDivElement }>
+const agents = new Map();
+let activeAgentId = null;
+
+/* ════════════════════════════════════════════════════════════
+   DOM refs
+   ════════════════════════════════════════════════════════════ */
+
+const canvas = document.getElementById("grid-canvas");
+const ctx = canvas.getContext("2d");
+const hudGameId = document.getElementById("hud-game-id");
+const hudLevel = document.getElementById("hud-level");
+const hudActions = document.getElementById("hud-actions");
+const hudState = document.getElementById("hud-state");
+const tabsContainer = document.getElementById("agent-tabs");
+const logsContainer = document.getElementById("agent-logs-container");
+const agentEmpty = document.getElementById("agent-empty");
+const timelineTrack = document.getElementById("timeline-track");
+const statusEl = document.getElementById("status");
+
+// Action buttons keyed by action name
+const actionBtns = {};
+document.querySelectorAll(".action-btn[data-action]").forEach(btn => {
+  actionBtns[btn.dataset.action] = btn;
+});
+
+/* ════════════════════════════════════════════════════════════
+   Action buttons
+   ════════════════════════════════════════════════════════════ */
+
+function updateAvailableActions(available) {
+  const avail = new Set(available);
+  avail.add("RESET"); // always available
+  for (const [name, btn] of Object.entries(actionBtns)) {
+    btn.classList.toggle("unavailable", !avail.has(name));
+  }
+}
+
+let lastActionBtn = null;
+function flashAction(actionName) {
+  const btn = actionBtns[actionName];
+  if (!btn) return;
+  // Move persistent glow to this button
+  if (lastActionBtn && lastActionBtn !== btn) {
+    lastActionBtn.classList.remove("last-action");
+  }
+  btn.classList.add("last-action");
+  lastActionBtn = btn;
+  // Trigger pulse animation (remove + re-add to restart)
+  btn.classList.remove("flash");
+  void btn.offsetWidth; // force reflow
+  btn.classList.add("flash");
+}
+
+const clickCoordsEl = document.getElementById("click-coords");
+const clickBtn = document.getElementById("click-btn");
+let lastClickX = null;
+let lastClickY = null;
+let clickHighlightVisible = false;
+
+// Show/hide click highlight on hover over click button
+clickBtn.addEventListener("mouseenter", () => {
+  if (lastClickX != null) {
+    clickHighlightVisible = true;
+    redrawWithHighlight();
+  }
+});
+clickBtn.addEventListener("mouseleave", () => {
+  if (clickHighlightVisible) {
+    clickHighlightVisible = false;
+    if (currentSnapshotIdx >= 0) drawGrid(snapshots[currentSnapshotIdx].grid);
+  }
+});
+
+/* ════════════════════════════════════════════════════════════
+   Grid rendering
+   ════════════════════════════════════════════════════════════ */
+
+function drawGrid(grid) {
+  for (let y = 0; y < grid.length; y++) {
+    const row = grid[y];
+    for (let x = 0; x < row.length; x++) {
+      ctx.fillStyle = palette[row[x]] || "#FF00FF";
+      ctx.fillRect(x * CELL_PX, y * CELL_PX, CELL_PX, CELL_PX);
+    }
+  }
+  if (clickHighlightVisible) drawClickHighlight();
+}
+
+function drawClickHighlight() {
+  if (lastClickX == null || lastClickY == null) return;
+  const px = lastClickX * CELL_PX;
+  const py = lastClickY * CELL_PX;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px + 1, py + 1, CELL_PX - 2, CELL_PX - 2);
+  ctx.strokeStyle = "var(--accent)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px, py, CELL_PX, CELL_PX);
+}
+
+function redrawWithHighlight() {
+  if (currentSnapshotIdx >= 0) {
+    drawGrid(snapshots[currentSnapshotIdx].grid);
+  }
+}
+
+function updateClickInfo(x, y) {
+  lastClickX = x;
+  lastClickY = y;
+  clickCoordsEl.textContent = `(${x}, ${y})`;
+}
+
+function updateHUD(snap) {
+  const total = snap.win_levels || "?";
+  hudLevel.textContent = `Level ${snap.level}/${total}`;
+  hudActions.textContent = `Action #${snap.count}`;
+  hudState.textContent = snap.state;
+  hudState.className = "badge badge-state-" + snap.state;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Timeline
+   ════════════════════════════════════════════════════════════ */
+
+// Map from snapshot index -> tick DOM element (labels don't get entries)
+const tickElements = [];
+let timelineLastLevel = -1;
+let levelStartIdx = 0;
+
+const timelineLabel = document.getElementById("timeline-label");
+
+function updateTimelineLabel() {
+  const n = snapshots.length;
+  timelineLabel.textContent = n ? `Timeline · ${n} actions` : "Timeline";
+}
+
+function addTimelineTick(snap, idx) {
+  // If level changed, insert a level-break marker
+  if (timelineLastLevel >= 0 && snap.level > timelineLastLevel) {
+    const actionsInLevel = idx - levelStartIdx;
+    const marker = document.createElement("div");
+    marker.className = "timeline-level-break";
+    marker.textContent = `${timelineLastLevel}(${actionsInLevel})`;
+    marker.title = `Level ${timelineLastLevel} completed in ${actionsInLevel} actions`;
+    timelineTrack.appendChild(marker);
+    levelStartIdx = idx;
+  }
+  if (timelineLastLevel < 0) timelineLastLevel = snap.level;
+  if (snap.level !== timelineLastLevel) {
+    timelineLastLevel = snap.level;
+  }
+
+  const tick = document.createElement("div");
+  tick.className = "timeline-tick state-" + snap.state;
+  tick.title = `#${snap.count} ${snap.action} (${snap.state})`;
+  tick.dataset.idx = idx;
+  timelineTrack.appendChild(tick);
+  tickElements[idx] = tick;
+  timelineTrack.scrollLeft = timelineTrack.scrollWidth;
+  updateTimelineLabel();
+}
+
+// Drag-to-scrub: mousedown on a tick starts, mousemove over ticks selects, mouseup stops.
+let scrubbing = false;
+
+function tickIndexFromEvent(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el || el.dataset.idx == null) return -1;
+  return parseInt(el.dataset.idx, 10);
+}
+
+timelineTrack.addEventListener("mousedown", (e) => {
+  const idx = tickIndexFromEvent(e);
+  if (idx >= 0) { scrubbing = true; selectSnapshot(idx); }
+  e.preventDefault();
+});
+document.addEventListener("mousemove", (e) => {
+  if (!scrubbing) return;
+  const idx = tickIndexFromEvent(e);
+  if (idx >= 0) selectSnapshot(idx);
+});
+document.addEventListener("mouseup", () => { scrubbing = false; });
+
+function selectSnapshot(idx) {
+  if (idx < 0 || idx >= snapshots.length) return;
+  if (currentSnapshotIdx >= 0 && tickElements[currentSnapshotIdx]) {
+    tickElements[currentSnapshotIdx].classList.remove("active");
+  }
+  currentSnapshotIdx = idx;
+  if (tickElements[idx]) tickElements[idx].classList.add("active");
+  const snap = snapshots[idx];
+  drawGrid(snap.grid);
+  updateHUD(snap);
+  // Sync action buttons to this snapshot
+  if (snap.available_actions.length) updateAvailableActions(snap.available_actions);
+  // Sync last-action highlight
+  if (lastActionBtn) lastActionBtn.classList.remove("last-action");
+  const btn = actionBtns[snap.action];
+  if (btn) { btn.classList.add("last-action"); lastActionBtn = btn; }
+  // Sync click coords
+  if (snap.click_x != null) {
+    updateClickInfo(snap.click_x, snap.click_y);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   Agent tabs & logs
+   ════════════════════════════════════════════════════════════ */
+
+let streamingAgentId = null;
+
+function updateTabLabel(entry, agentId) {
+  let label = `Agent ${agentId}`;
+  if (entry.parentId != null) {
+    label += `<span class="parent-hint">&larr; Agent ${entry.parentId}</span>`;
+  }
+  label += `<span class="spinner"></span>`;
+  entry.tab.innerHTML = label;
+}
+
+function markStreaming(agentId) {
+  if (streamingAgentId === agentId) return;
+  if (streamingAgentId != null) {
+    const prev = agents.get(streamingAgentId);
+    if (prev) prev.tab.classList.remove("streaming");
+  }
+  streamingAgentId = agentId;
+  const cur = agents.get(agentId);
+  if (cur) cur.tab.classList.add("streaming");
+}
+
+function ensureAgent(agentId, parentId) {
+  const existing = agents.get(agentId);
+  if (existing) {
+    // Update parent if we just learned it (spawn fires before call_enter)
+    if (parentId != null && existing.parentId == null) {
+      existing.parentId = parentId;
+      updateTabLabel(existing, agentId);
+    }
+    return existing;
+  }
+  agentEmpty.style.display = "none";
+
+  // Create log pane
+  const logEl = document.createElement("div");
+  logEl.className = "agent-log";
+  logEl.id = "agent-log-" + agentId;
+  logsContainer.appendChild(logEl);
+
+  // Create tab
+  const tab = document.createElement("div");
+  tab.className = "agent-tab";
+  tab.dataset.agentId = agentId;
+  tab.addEventListener("click", () => activateAgent(agentId));
+  tabsContainer.appendChild(tab);
+
+  const entry = { parentId, logEl, tab, currentBlock: null, currentBlockClass: null };
+  updateTabLabel(entry, agentId);
+  agents.set(agentId, entry);
+
+  // Activate first agent automatically
+  if (agents.size === 1) activateAgent(agentId);
+
+  return entry;
+}
+
+function activateAgent(agentId) {
+  if (activeAgentId === agentId) return;
+  // Deactivate current
+  if (activeAgentId != null) {
+    const prev = agents.get(activeAgentId);
+    if (prev) {
+      prev.tab.classList.remove("active");
+      prev.logEl.classList.remove("active");
+    }
+  }
+  activeAgentId = agentId;
+  const cur = agents.get(agentId);
+  if (cur) {
+    cur.tab.classList.add("active");
+    cur.logEl.classList.add("active");
+    if (cur.autoScroll) {
+      cur.logEl.scrollTop = cur.logEl.scrollHeight;
+    }
+  }
+}
+
+function autoScroll(agent) {
+  const el = agent.logEl;
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+const USER_BLOCK_CLASSES = new Set(["role-user", "role-system"]);
+const COLLAPSE_HEIGHT_PX = 1.6 * 12 * 10; // line-height * font-size * 10 lines
+
+function finalizeBlock(agent) {
+  if (!agent.currentBlock) return;
+
+  // Usage: insert collapsed summary
+  if (agent.currentBlockClass === "chunk-usage") {
+    const raw = agent.currentBlock.textContent.trim();
+    const summary = document.createElement("div");
+    summary.className = "usage-summary";
+    try {
+      const obj = JSON.parse(raw);
+      const inp = obj.input_tokens ?? "?";
+      const out = obj.output_tokens ?? "?";
+      const cached = obj.input_tokens_details?.cached_tokens ?? 0;
+      const reasoning = obj.output_tokens_details?.reasoning_tokens ?? 0;
+      summary.textContent = `\u25b8 usage: ${inp} in (${cached} cached) / ${out} out (${reasoning} reasoning)`;
+    } catch {
+      summary.textContent = `\u25b8 usage: ${raw.slice(0, 80)}`;
+    }
+    summary.addEventListener("click", () => summary.classList.toggle("expanded"));
+    agent.currentBlock.parentNode.insertBefore(summary, agent.currentBlock);
+  }
+
+  // User/system blocks: collapse if content exceeds threshold.
+  // Use line count heuristic since scrollHeight is 0 on hidden tabs.
+  if (USER_BLOCK_CLASSES.has(agent.currentBlockClass)) {
+    const wrapper = agent.currentBlock.parentNode;
+    if (wrapper && wrapper.classList.contains("user-msg-wrapper")) {
+      const text = agent.currentBlock.textContent || "";
+      const lineCount = text.split("\n").length;
+      if (lineCount > 10) {
+        wrapper.classList.add("collapsed");
+        const btn = wrapper.nextElementSibling;
+        if (btn && btn.classList.contains("user-expand-btn")) {
+          btn.style.display = "block";
+        }
+      }
+    }
+  }
+
+  agent.currentBlock = null;
+  agent.currentBlockClass = null;
+}
+
+function getOrCreateBlock(agent, cssClass) {
+  if (agent.currentBlock && agent.currentBlockClass === cssClass) {
+    return agent.currentBlock;
+  }
+  finalizeBlock(agent);
+  const pre = document.createElement("pre");
+  pre.className = "log-block " + cssClass;
+
+  if (USER_BLOCK_CLASSES.has(cssClass)) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "user-msg-wrapper";
+    const fade = document.createElement("div");
+    fade.className = "user-fade";
+    wrapper.appendChild(pre);
+    wrapper.appendChild(fade);
+    agent.logEl.appendChild(wrapper);
+
+    const btn = document.createElement("div");
+    btn.className = "user-expand-btn";
+    btn.style.display = "none";
+    btn.textContent = "\u25b8 show full message";
+    btn.addEventListener("click", () => {
+      const isCollapsed = wrapper.classList.toggle("collapsed");
+      btn.textContent = isCollapsed ? "\u25b8 show full message" : "\u25be collapse";
+    });
+    agent.logEl.appendChild(btn);
+  } else if (cssClass === "chunk-code") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-wrapper";
+    const lang = document.createElement("span");
+    lang.className = "code-lang";
+    lang.textContent = "python";
+    wrapper.appendChild(lang);
+    wrapper.appendChild(pre);
+    agent.logEl.appendChild(wrapper);
+  } else {
+    agent.logEl.appendChild(pre);
+  }
+
+  agent.currentBlock = pre;
+  agent.currentBlockClass = cssClass;
+  return pre;
+}
+
+function appendChunk(agentId, text, cssClass) {
+  const agent = agents.get(agentId);
+  if (!agent) return;
+  const block = getOrCreateBlock(agent, cssClass);
+  block.appendChild(document.createTextNode(text));
+  autoScroll(agent);
+}
+
+function appendSeparator(agentId, text) {
+  const agent = agents.get(agentId);
+  if (!agent) return;
+  finalizeBlock(agent);
+  const div = document.createElement("div");
+  div.className = "log-separator";
+  div.textContent = text;
+  agent.logEl.appendChild(div);
+  autoScroll(agent);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Event dispatch
+   ════════════════════════════════════════════════════════════ */
+
+function handleEvent(evt) {
+  switch (evt.type) {
+    case "init":
+    case "palette":
+      palette = evt.colors;
+      if (evt.game_id) {
+        hudGameId.textContent = evt.game_id;
+        hudGameId.style.display = "";
+        document.title = `${evt.game_id} — ARC-AGI-3 Visualizer`;
+      }
+      break;
+
+    case "agent_spawn":
+      ensureAgent(evt.agent_id, evt.parent_id);
+      appendSeparator(evt.agent_id, `Agent ${evt.agent_id} spawned`);
+      break;
+
+    case "agent_call_enter": {
+      const agent = ensureAgent(evt.agent_id, evt.parent_id);
+      agent.tab.classList.remove("dead");
+      agent.tab.classList.add("in-flight");
+      const caller = evt.parent_id != null ? "Agent " + evt.parent_id : "User";
+      appendSeparator(evt.agent_id, `\u25b6 Call from ${caller}`);
+      appendChunk(evt.agent_id, evt.prompt, "role-user");
+      break;
+    }
+
+    case "agent_chunk": {
+      ensureAgent(evt.agent_id, null);
+      markStreaming(evt.agent_id);
+      const cls = evt.chunk_type
+        ? "chunk-" + evt.chunk_type
+        : (evt.role === "user" ? "role-user" : (evt.role === "system" ? "role-system" : "chunk-default"));
+      appendChunk(evt.agent_id, evt.content, cls);
+      break;
+    }
+
+    case "agent_call_exit": {
+      const agent = ensureAgent(evt.agent_id, null);
+      agent.tab.classList.remove("in-flight");
+      agent.tab.classList.add("dead");
+      if (streamingAgentId === evt.agent_id) {
+        agent.tab.classList.remove("streaming");
+        streamingAgentId = null;
+      }
+      appendSeparator(evt.agent_id, `\u25c0 Returned`);
+      break;
+    }
+
+    case "game_action": {
+      const snap = {
+        action: evt.action,
+        count: evt.count,
+        level: evt.level,
+        win_levels: evt.win_levels || 0,
+        state: evt.state,
+        grid: evt.grid,
+        available_actions: evt.available_actions || [],
+        click_x: evt.click_x ?? null,
+        click_y: evt.click_y ?? null,
+      };
+      const idx = snapshots.length;
+      snapshots.push(snap);
+      addTimelineTick(snap, idx);
+      selectSnapshot(idx);
+      flashAction(evt.action);
+      break;
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   WebSocket connection
+   ════════════════════════════════════════════════════════════ */
+
+function connect() {
+  const params = new URLSearchParams(window.location.search);
+  const wsUrl = params.get("ws") || "ws://localhost:8765";
+
+  statusEl.className = "connecting";
+  statusEl.textContent = "Connecting...";
+
+  const ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    statusEl.className = "connected";
+    statusEl.textContent = "Connected";
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const evt = JSON.parse(e.data);
+      handleEvent(evt);
+    } catch (err) {
+      console.error("Failed to parse event:", err, e.data);
+    }
+  };
+
+  ws.onclose = () => {
+    statusEl.className = "disconnected";
+    statusEl.textContent = "Disconnected — retrying...";
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+/* ════════════════════════════════════════════════════════════
+   Init
+   ════════════════════════════════════════════════════════════ */
+
+// Draw empty grid
+ctx.fillStyle = "#000";
+ctx.fillRect(0, 0, CANVAS_PX, CANVAS_PX);
+
+connect();
+</script>
+</body>
+</html>
