@@ -99,10 +99,14 @@ class Agentica(Agent):
             last_available = raw.available_actions
             self.append_frame(raw)
             self.action_counter += 1
-            if action is not GameAction.RESET:
-                has_moves_since_reset = True
-            else:
+            if action is GameAction.RESET:
                 has_moves_since_reset = False
+            elif last_frame is not None and raw.levels_completed != last_frame.levels_completed:
+                # Level transition: engine called set_level() which zeroed
+                # _action_count, so the next RESET would be a full_reset.
+                has_moves_since_reset = False
+            else:
+                has_moves_since_reset = True
             logger.info(
                 f"{self.game_id} - {action.name}: count {self.action_counter}, "
                 f"level {raw.levels_completed}/{raw.win_levels}"
@@ -229,13 +233,15 @@ class Agentica(Agent):
             },
         )
         remaining = self.MAX_ACTIONS - self.action_counter
+        actions = ", ".join(initial_frame.available_actions)
         return await orchestrator.call(
             None,
-            f"Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
-            f"You have {remaining} actions remaining. "
-            "Start by spawning an explorer subagent — give it `submit_action`, "
-            "`initial_frame`, and `GAME_REFERENCE`. "
-            "Do NOT inspect the frame or call submit_action yourself.",
+            f"New game. Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
+            f"{remaining} actions remaining.\n"
+            f"Available actions for this level: {actions}\n\n"
+            "Take a moment to plan your approach before spawning any agents. "
+            "When ready, spawn an explorer and give it `submit_action`, "
+            "`initial_frame`, and `GAME_REFERENCE`.",
             initial_frame=initial_frame,
             submit_action=submit_action,
             GAME_REFERENCE=GAME_REFERENCE,

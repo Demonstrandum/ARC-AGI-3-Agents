@@ -413,6 +413,95 @@
     height: 20px;
   }
 
+  /* ── Action markers in agent logs ─────────────────────── */
+  .action-marker {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    background: rgba(99, 102, 241, .12);
+    border: 1px solid rgba(99, 102, 241, .3);
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin: 4px 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .action-marker:hover { background: rgba(99, 102, 241, .25); }
+  .action-marker.active-marker { background: rgba(99, 102, 241, .35); outline: 1px solid var(--accent); }
+
+  /* ── Replay controls ────────────────────────────────────── */
+  #replay-toggle {
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text-muted);
+    user-select: none;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+    transition: color .15s;
+  }
+  #replay-toggle:hover { color: var(--text); }
+  #replay-toggle.open { color: var(--accent); }
+
+  #replay-panel {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  #replay-panel.open { display: flex; }
+
+  #replay-panel input[type="number"] {
+    width: 52px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 4px;
+    text-align: center;
+  }
+  #replay-panel input[type="number"]:focus { outline: 1px solid var(--accent); }
+
+  .replay-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 3px 8px;
+    cursor: pointer;
+    user-select: none;
+    font-family: var(--font-sans);
+    transition: background .1s;
+  }
+  .replay-btn:hover { background: var(--border); }
+  .replay-btn.active { background: var(--accent-dim); color: #fff; border-color: var(--accent); }
+
+  .replay-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  #replay-speed {
+    width: 60px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 4px;
+  }
+  #replay-speed:focus { outline: 1px solid var(--accent); }
+
   /* ── Connection status ─────────────────────────────────── */
   #status {
     position: fixed;
@@ -480,6 +569,27 @@
 
   <div id="timeline-panel">
     <span id="timeline-label">Timeline</span>
+    <span id="replay-toggle" title="Replay controls">&#9654;</span>
+    <div id="replay-panel">
+      <input type="number" id="replay-from" value="0" min="0" title="Start action">
+      <span>&ndash;</span>
+      <input type="number" id="replay-to" value="0" min="0" title="End action">
+      <div class="replay-sep"></div>
+      <button class="replay-btn" id="replay-step-back" title="Step back">&larr;</button>
+      <button class="replay-btn" id="replay-play" title="Play / Pause">&#9654;</button>
+      <button class="replay-btn" id="replay-step-fwd" title="Step forward">&rarr;</button>
+      <div class="replay-sep"></div>
+      <label>Delay</label>
+      <select id="replay-speed">
+        <option value="0">0ms</option>
+        <option value="50">50ms</option>
+        <option value="150" selected>150ms</option>
+        <option value="300">300ms</option>
+        <option value="500">500ms</option>
+        <option value="1000">1s</option>
+        <option value="2000">2s</option>
+      </select>
+    </div>
     <div id="timeline-track"></div>
   </div>
 </div>
@@ -689,6 +799,8 @@ document.addEventListener("mousemove", (e) => {
 });
 document.addEventListener("mouseup", () => { scrubbing = false; });
 
+let activeMarkerEl = null;
+
 function selectSnapshot(idx) {
   if (idx < 0 || idx >= snapshots.length) return;
   if (currentSnapshotIdx >= 0 && tickElements[currentSnapshotIdx]) {
@@ -699,15 +811,25 @@ function selectSnapshot(idx) {
   const snap = snapshots[idx];
   drawGrid(snap.grid);
   updateHUD(snap);
-  // Sync action buttons to this snapshot
   if (snap.available_actions.length) updateAvailableActions(snap.available_actions);
-  // Sync last-action highlight
   if (lastActionBtn) lastActionBtn.classList.remove("last-action");
   const btn = actionBtns[snap.action];
   if (btn) { btn.classList.add("last-action"); lastActionBtn = btn; }
-  // Sync click coords
   if (snap.click_x != null) {
     updateClickInfo(snap.click_x, snap.click_y);
+  }
+  // Jump to the agent that performed this action
+  if (snap.agentId != null) {
+    activateAgent(snap.agentId);
+  }
+  // Scroll to + highlight the action marker
+  if (activeMarkerEl) activeMarkerEl.classList.remove("active-marker");
+  if (snap.markerEl) {
+    snap.markerEl.classList.add("active-marker");
+    snap.markerEl.scrollIntoView({ block: "center", behavior: "instant" });
+    activeMarkerEl = snap.markerEl;
+  } else {
+    activeMarkerEl = null;
   }
 }
 
@@ -962,6 +1084,7 @@ function handleEvent(evt) {
     }
 
     case "game_action": {
+      const agentId = streamingAgentId;
       const snap = {
         action: evt.action,
         count: evt.count,
@@ -972,16 +1095,145 @@ function handleEvent(evt) {
         available_actions: evt.available_actions || [],
         click_x: evt.click_x ?? null,
         click_y: evt.click_y ?? null,
+        agentId,
+        markerEl: null,
       };
       const idx = snapshots.length;
       snapshots.push(snap);
+
+      // Insert a clickable marker in the agent's log
+      if (agentId != null) {
+        const agent = agents.get(agentId);
+        if (agent) {
+          finalizeBlock(agent);
+          const marker = document.createElement("div");
+          marker.className = "action-marker";
+          marker.textContent = `\u25c6 Action #${snap.count} \u2014 ${snap.action}`;
+          marker.dataset.snapIdx = idx;
+          marker.addEventListener("click", () => selectSnapshot(idx));
+          agent.logEl.appendChild(marker);
+          snap.markerEl = marker;
+          autoScroll(agent);
+        }
+      }
+
       addTimelineTick(snap, idx);
       selectSnapshot(idx);
       flashAction(evt.action);
+      updateReplayRange();
       break;
     }
   }
 }
+
+/* ════════════════════════════════════════════════════════════
+   Replay controller
+   ════════════════════════════════════════════════════════════ */
+
+const replayToggle = document.getElementById("replay-toggle");
+const replayPanel = document.getElementById("replay-panel");
+const replayFrom = document.getElementById("replay-from");
+const replayTo = document.getElementById("replay-to");
+const replayPlay = document.getElementById("replay-play");
+const replayStepBack = document.getElementById("replay-step-back");
+const replayStepFwd = document.getElementById("replay-step-fwd");
+const replaySpeed = document.getElementById("replay-speed");
+
+let replayTimerId = null;
+let replayPlaying = false;
+
+replayToggle.addEventListener("click", () => {
+  const open = replayPanel.classList.toggle("open");
+  replayToggle.classList.toggle("open", open);
+  replayToggle.innerHTML = open ? "&#9660;" : "&#9654;";
+});
+
+function updateReplayRange() {
+  const max = Math.max(0, snapshots.length - 1);
+  replayFrom.max = max;
+  replayTo.max = max;
+  if (parseInt(replayTo.value) < parseInt(replayFrom.value)) {
+    replayTo.value = max;
+  }
+  if (snapshots.length && parseInt(replayTo.value) === 0 && max > 0) {
+    replayTo.value = max;
+  }
+}
+
+function replayStop() {
+  if (replayTimerId != null) {
+    clearTimeout(replayTimerId);
+    replayTimerId = null;
+  }
+  replayPlaying = false;
+  replayPlay.classList.remove("active");
+  replayPlay.innerHTML = "&#9654;";
+}
+
+function replayStep(dir) {
+  const next = currentSnapshotIdx + dir;
+  if (next >= 0 && next < snapshots.length) {
+    selectSnapshot(next);
+  }
+}
+
+function replayTick() {
+  const endVal = parseInt(replayTo.value);
+  const endIdx = isNaN(endVal) ? snapshots.length - 1 : endVal;
+  const next = currentSnapshotIdx + 1;
+  if (next > endIdx || next >= snapshots.length) {
+    replayStop();
+    return;
+  }
+  selectSnapshot(next);
+  const delay = parseInt(replaySpeed.value) || 0;
+  replayTimerId = setTimeout(replayTick, delay);
+}
+
+function replayStart() {
+  replayPlaying = true;
+  replayPlay.classList.add("active");
+  replayPlay.innerHTML = "&#9646;&#9646;";
+  const fromVal = parseInt(replayFrom.value);
+  const fromIdx = isNaN(fromVal) ? 0 : fromVal;
+  const toVal = parseInt(replayTo.value);
+  const toIdx = isNaN(toVal) ? snapshots.length - 1 : toVal;
+  if (currentSnapshotIdx < fromIdx || currentSnapshotIdx >= toIdx) {
+    selectSnapshot(fromIdx);
+  }
+  const delay = parseInt(replaySpeed.value) || 0;
+  replayTimerId = setTimeout(replayTick, delay);
+}
+
+replayPlay.addEventListener("click", () => {
+  if (replayPlaying) { replayStop(); } else { replayStart(); }
+});
+replayStepBack.addEventListener("click", () => { replayStop(); replayStep(-1); });
+replayStepFwd.addEventListener("click", () => { replayStop(); replayStep(1); });
+
+replayFrom.addEventListener("change", () => {
+  let v = parseInt(replayFrom.value) || 0;
+  v = Math.max(0, Math.min(v, snapshots.length - 1));
+  replayFrom.value = v;
+  if (parseInt(replayTo.value) < v) replayTo.value = v;
+  selectSnapshot(v);
+});
+replayTo.addEventListener("change", () => {
+  let v = parseInt(replayTo.value) || 0;
+  v = Math.max(0, Math.min(v, snapshots.length - 1));
+  replayTo.value = v;
+  if (parseInt(replayFrom.value) > v) replayFrom.value = v;
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "ArrowLeft") { e.preventDefault(); replayStop(); replayStep(-1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); replayStop(); replayStep(1); }
+  else if (e.key === " " && snapshots.length) {
+    e.preventDefault();
+    if (replayPlaying) replayStop(); else replayStart();
+  }
+});
 
 /* ════════════════════════════════════════════════════════════
    WebSocket connection

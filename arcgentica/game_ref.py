@@ -8,14 +8,26 @@ Origin (0,0) at top-left, X rightward, Y downward.
 Levels: The game has multiple levels. `frame.levels_completed` is the number of levels
   beaten so far. You are currently playing level `frame.levels_completed` (zero-indexed).
   `frame.win_levels` is the total number of levels required to win.
+  When you complete a level, the next level loads WITHIN THE SAME ACTION — the returned
+  frame already shows the new level with state=NOT_FINISHED and levels_completed incremented.
+  state=WIN only occurs when ALL levels are beaten. To detect level completion mid-game,
+  watch for levels_completed increasing — do NOT check for state==WIN.
 
 Actions (pass as action_name to submit_action):
   RESET, ACTION1 (Up), ACTION2 (Down), ACTION3 (Left), ACTION4 (Right),
   ACTION5 (Spacebar/Enter), ACTION6 (Click at x, y — requires x and y params)
+  NOT all actions are available in every game. Always check frame.available_actions
+  before attempting an action — unavailable actions will raise an error.
 
 RESET behavior: RESET restarts the CURRENT level without losing progress.
   It does NOT go back to level 0. Your levels_completed is preserved.
+  New levels always start in a clean state — do NOT waste a move calling RESET
+  at the start of a new level.
   Always check frame.levels_completed after any RESET to confirm your level.
+
+Every action counts. Be efficient — don't take exploratory actions you've already
+  taken, don't RESET unless you're actually stuck, and prefer targeted experiments
+  over exhaustive sweeps.
 
 Frame helpers:
   frame.render(keys, y_ticks, x_ticks, crop) — text render; crop=(x1,y1,x2,y2) to zoom
@@ -29,7 +41,7 @@ Frame helpers:
   frame.bounding_box(*colors) — (x1, y1, x2, y2) of matching pixels
   frame.color_counts() — dict of color → count
   frame.grid — raw 2D list
-  frame.state — GameState (NOT_FINISHED, WIN, GAME_OVER)
+  frame.state — NOT_FINISHED (playing), WIN (all levels beaten), GAME_OVER (lost)
   frame.levels_completed — levels beaten so far (current level index)
   frame.win_levels — total levels needed to win
   frame.available_actions — list of valid action names"""
@@ -72,8 +84,12 @@ they may spend (e.g. "use at most 10 actions to explore").
 ## Orchestration Phases
 
 1. **Explore** — Spawn an explorer. Give it `submit_action` and the initial frame.
-   Ask it to render the grid, try each available action, diff frames, and report back
-   a structured summary of the layout, objects found, and what each action does.
+   Tell it which actions are available (from `initial_frame.available_actions`).
+   Ask it to try them, see what happens, diff frames, and report back a structured summary including:
+   - The scene layout: what objects/regions exist, where they are, their colors
+   - What each color appears to represent (walls, goals, cursors, background, etc.)
+   - What each action does (movement direction, interaction effects)
+   - Any UI elements (score bars, indicators, level markers)
 
 2. **Hypothesize** — Spawn a theorist (no `submit_action`). Feed it the explorer's
    summary. Ask it to form hypotheses about the game rules and the win condition.
@@ -94,15 +110,19 @@ they may spend (e.g. "use at most 10 actions to explore").
 6. **Next level** — On WIN, the game advances. Spawn a new explorer to assess the
    new grid. Decide: does the same strategy apply, or do you need a fresh cycle?
 
+Only fewer or even one of these phases may be needed depending on the difficulty of the level.
+
 ## Accumulating Wisdom
 
 When a subagent reports back, ask it not just *what* it found, but *how* it found it —
 which analysis techniques were useful AND which were dead ends (e.g. "diffing before/after
 ACTION5 revealed the pattern", "color_counts() was uninformative because the grid is
 mostly one color", "full-grid render was too noisy — cropping to the active region made
-the structure obvious"). Maintain a running summary of both successful and failed
-strategies and analysis methods. When you brief future subagents, pass along:
-- **Game knowledge**: confirmed rules, patterns, mechanics discovered so far.
+the structure obvious"). Maintain a running knowledge base and pass it to every future
+subagent so they never start from scratch. It should include:
+- **Scene map**: what each color means, where key objects are, spatial layout,
+  UI elements (score bars, move counters), and how the scene changes across levels.
+- **Game mechanics**: confirmed rules, what each action does, win/lose conditions.
 - **What worked**: which Frame helpers, diffing approaches, rendering crops, or
   experimental designs proved most informative.
 - **What didn't work**: which techniques wasted actions or produced noise, which
