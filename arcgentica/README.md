@@ -49,8 +49,10 @@ replays all buffered events, then streams new ones as they happen.
 WebSocket server, reads the saved JSONL, waits for a frontend to connect, then
 replays events with original timing (adjustable with `--speed` or `--no-delay`).
 
+Make sure dependencies are installed first: `uv sync`
+
 ```
-python -m arcgentica.replay visualizer_logs/ls20-cb3b57cc_20260217_164918.jsonl
-python -m arcgentica.replay session.jsonl --speed 4
-python -m arcgentica.replay session.jsonl --no-delay
+uv run python -m arcgentica.replay visualizer_logs/ls20-cb3b57cc_20260217_164918.jsonl
+uv run python -m arcgentica.replay session.jsonl --speed 4
+uv run python -m arcgentica.replay session.jsonl --no-delay
 ```
