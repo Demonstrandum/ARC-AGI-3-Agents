@@ -1,4 +1,5 @@
-"""WebSocket event server for the ARC-AGI-3 visualizer.
+"""
+WebSocket event server for the ARC-AGI-3 visualizer.
 
 Runs as an asyncio background task in the same event loop as the agent.
 Buffers all events so late-connecting frontends get a full replay, then
@@ -35,7 +36,9 @@ _TAG = f"{_CYAN}[visualizer]{_RESET}"
 
 
 class EventServer:
-    """Async WebSocket server that broadcasts visualizer events."""
+    """
+    Async WebSocket server that broadcasts visualizer events.
+    """
 
     _host: str
     _port: int
@@ -64,7 +67,9 @@ class EventServer:
     # -- lifecycle ------------------------------------------------------------
 
     async def start(self) -> None:
-        """Start the WebSocket server as a background task."""
+        """
+        Start the WebSocket server as a background task.
+        """
         self._loop = asyncio.get_running_loop()
         self._log_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
@@ -87,7 +92,9 @@ class EventServer:
         print(f"{_TAG} Waiting for frontend connection ...")
 
     async def stop(self) -> None:
-        """Gracefully shut down the server."""
+        """
+        Gracefully shut down the server.
+        """
         if self._server is not None:
             print(f"{_TAG} Shutting down server ...")
             self._server.close()
@@ -127,7 +134,9 @@ class EventServer:
     # -- event pushing --------------------------------------------------------
 
     def push(self, event: Event) -> None:
-        """Push an event (sync-safe — may be called from any thread)."""
+        """
+        Push an event (sync-safe — may be called from any thread).
+        """
         msg = event.to_json()
         with self._lock:
             self._buffer.append(msg)
@@ -146,7 +155,9 @@ class EventServer:
         click_x: int | None = None,
         click_y: int | None = None,
     ) -> None:
-        """Convenience wrapper to push a GameActionEvent from submit_action."""
+        """
+        Convenience wrapper to push a GameActionEvent from submit_action.
+        """
         self.push(
             GameActionEvent(
                 action=action_name,

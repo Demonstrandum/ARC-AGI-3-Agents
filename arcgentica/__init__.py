@@ -1,4 +1,6 @@
-"""arcgentica — ARC-AGI-3 agent toolkit: frame helpers, colors, WebSocket visualizer."""
+"""
+arcgentica — ARC-AGI-3 agent toolkit: frame helpers, colors, WebSocket visualizer.
+"""
 
 from .colors import COLOR_LEGEND, COLOR_NAMES, PALETTE
 from .events import (

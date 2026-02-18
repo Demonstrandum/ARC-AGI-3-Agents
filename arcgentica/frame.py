@@ -1,4 +1,6 @@
-"""Frame wrapper around arcengine.FrameData with grid inspection helpers."""
+"""
+Frame wrapper around arcengine.FrameData with grid inspection helpers.
+"""
 
 from dataclasses import dataclass
 from typing import Literal, Self
@@ -8,7 +10,8 @@ from arcengine import FrameData, GameAction, GameState
 
 @dataclass(slots=True)
 class DiffRegion:
-    """A contiguous region of changed cells between two frames.
+    """
+    A contiguous region of changed cells between two frames.
 
     Attributes:
         x0, y0, x1, y1: Bounding box (inclusive start, exclusive end).
@@ -44,7 +47,8 @@ def _cluster_changes(
     changes: list[tuple[int, int, int, int]],
     margin: int = 2,
 ) -> list[DiffRegion]:
-    """Group changes into contiguous regions.
+    """
+    Group changes into contiguous regions.
 
     Two changes belong to the same region if their bounding boxes
     (expanded by *margin* pixels) overlap.
@@ -114,7 +118,8 @@ def _cluster_changes(
 
 
 class Frame:
-    """Wrapper around FrameData with grid inspection helpers.
+    """
+    Wrapper around FrameData with grid inspection helpers.
 
     Attributes:
         grid: 2D list[list[int]] — the first layer of the frame.
@@ -137,7 +142,7 @@ class Frame:
 
     def __init__(self, data: FrameData) -> None:
         self._data = data
-        self.grid = data.frame[0]
+        self.grid = data.frame[-1]
         self.state = data.state
         self.levels_completed = data.levels_completed
         self.win_levels = data.win_levels
@@ -153,7 +158,9 @@ class Frame:
 
     @property
     def available_actions(self) -> list[str]:
-        """Action names (e.g. 'ACTION1') that can be passed to submit_action."""
+        """
+        Action names (e.g. 'ACTION1') that can be passed to submit_action.
+        """
         actions = [GameAction.from_id(a).name for a in self._data.available_actions]
         if "RESET" not in actions:
             actions.append("RESET")
@@ -167,7 +174,8 @@ class Frame:
         x_ticks: bool = False,
         crop: tuple[int, int, int, int] | None = None,
     ) -> str:
-        """Render the grid as a text string.
+        """
+        Render the grid as a text string.
 
         Args:
             keys: 16-char string mapping each int 0-15 to a display character.
@@ -199,7 +207,8 @@ class Frame:
         return "\n".join(lines)
 
     def diff(self, other: Self, margin: int = 2) -> list[DiffRegion]:
-        """Cells that changed between self and other, grouped by contiguous region.
+        """
+        Cells that changed between self and other, grouped by contiguous region.
 
         Changes within *margin* pixels of each other are merged into the same
         DiffRegion.  Each region has a bounding box and a list of individual
@@ -224,7 +233,8 @@ class Frame:
         gap: str = " ",
         crop: tuple[int, int, int, int] | Literal["auto"] | None = None,
     ) -> str:
-        """Render a visual diff showing what changed between self and other.
+        """
+        Render a visual diff showing what changed between self and other.
 
         Args:
             keys: Character map for color values 0-15.
@@ -289,7 +299,8 @@ class Frame:
         return "\n".join(lines)
 
     def find(self, *colors: int) -> list[tuple[int, int, int]]:
-        """All pixels matching any of the given color values.
+        """
+        All pixels matching any of the given color values.
 
         Returns:
             [(x, y, value), ...] sorted by (y, x).
@@ -303,7 +314,9 @@ class Frame:
         ]
 
     def color_counts(self) -> dict[int, int]:
-        """Count of each color value present in the grid."""
+        """
+        Count of each color value present in the grid.
+        """
         counts: dict[int, int] = {}
         for row in self.grid:
             for val in row:
@@ -311,7 +324,8 @@ class Frame:
         return counts
 
     def bounding_box(self, *colors: int) -> tuple[int, int, int, int] | None:
-        """Tight bounding box of matching pixels: (x1, y1, x2, y2), exclusive end.
+        """
+        Tight bounding box of matching pixels: (x1, y1, x2, y2), exclusive end.
 
         At least one color must be specified.
         Returns None if no pixels match.

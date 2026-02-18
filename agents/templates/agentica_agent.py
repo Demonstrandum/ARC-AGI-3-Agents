@@ -36,9 +36,10 @@ REASONING_EFFORT: ReasoningEffort = "high"
 
 
 class Agentica(Agent):
-    """Agent that uses the Agentica SDK with a submit_action tool.
+    """
+    Agent that uses the Agentica SDK with a submit_action tool.
 
-    Calls the LLM once — the LLM drives the game by calling
+    Calls the LLM once -- the LLM drives the game by calling
     submit_action repeatedly within a single agent.call() invocation.
     """
 
@@ -53,7 +54,9 @@ class Agentica(Agent):
         self._logged_level: int = -1
 
     def _log_action(self, action: GameAction, frame: Frame) -> None:
-        """Append one JSONL line per action. Rotates file on level change."""
+        """
+        Append one JSONL line per action. Rotates file on level change.
+        """
         if self._action_log_dir is None:
             self._action_log_dir = Path("actions_log") / self.game_id
             self._action_log_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +98,9 @@ class Agentica(Agent):
         raise NotImplementedError("Agentica agent overrides main()")
 
     def _make_submit_action(self, server: EventServer | None = None):
-        """Create the submit_action tool function for the agentica agent."""
+        """
+        Create the submit_action tool function for the agentica agent.
+        """
 
         last_available: list[int] = []
         # True when a non-RESET action has been taken since the last reset.
@@ -142,7 +147,8 @@ class Agentica(Agent):
         def submit_action(
             action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
         ) -> Frame:
-            """Submit a game action and receive the new frame.
+            """
+            Submit a game action and receive the new frame (sync function).
 
             Args:
                 action_name: One of RESET, ACTION1-ACTION6.
@@ -206,7 +212,8 @@ class Agentica(Agent):
 
     @staticmethod
     def _make_bounded_submit_action(inner, limit: int):
-        """Wrap an existing submit_action with a hard action budget.
+        """
+        Wrap an existing submit_action with a hard action budget.
 
         The returned function delegates to `inner` for all calls. It shares
         inner's closure state (last_frame, has_moves_since_reset, etc.) so
@@ -239,14 +246,15 @@ class Agentica(Agent):
         return bounded
 
     async def spawn_agent(self, system_prompt: str | None = None):
-        """Spawn a new subagent that can be called repeatedly.
+        """
+        Spawn a new subagent that can be called repeatedly.
 
         Returns an agent handle. Use ``await agent.call(return_type, task, **objects)``
-        to invoke it.  The same handle can be called multiple times — each call
+        to invoke it. The same handle can be called multiple times; each call
         continues the conversation so the agent retains context from prior calls.
         Pass ``submit_action`` only to agents that need to take game actions.
 
-        Be careful about when you wan't to reuse context vs. spawn a new agent,
+        Be careful about when you want to reuse context vs. spawn a new agent,
         performance degrades as context grows, so there is a trade-off you have to consider.
         """
         return await spawn(
@@ -259,7 +267,9 @@ class Agentica(Agent):
         )
 
     async def _run(self) -> None:
-        """Async entry point: spawn agentica agent and let it play."""
+        """
+        Async entry point: spawn agentica agent and let it play.
+        """
         server: EventServer | None = None
         if self.visualize:
             server = EventServer(game_id=self.game_id)
@@ -274,7 +284,8 @@ class Agentica(Agent):
         # TODO: future idea --- also allow restricting to a subset of actions, e.g. only ACTION1-ACTION4.
         #       determine if this is useful for any of the games.
         def make_bounded_submit_action(limit: int):
-            """Create a new ``submit_action`` function with a hard action budget.
+            """
+            Create a new ``submit_action`` function with a hard action budget.
 
             Returns a ``submit_action`` that works identically to the normal one,
             but raises ValueError after ``limit`` game actions have been taken.
@@ -324,7 +335,9 @@ class Agentica(Agent):
 
     @trace_agent_session
     def main(self) -> None:
-        """Override the base agent loop — agentica drives the game."""
+        """
+        Override the base agent loop — agentica drives the game.
+        """
         self.timer = time.time()
         try:
             asyncio.run(self._run())

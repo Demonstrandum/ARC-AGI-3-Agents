@@ -1,4 +1,6 @@
-"""Game reference and system prompt strings."""
+"""
+Game reference and system prompt strings.
+"""
 
 from .colors import COLOR_LEGEND
 

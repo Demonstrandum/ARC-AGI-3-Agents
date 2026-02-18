@@ -1,4 +1,5 @@
-"""Event dataclasses for the WebSocket visualizer protocol.
+"""
+Event dataclasses for the WebSocket visualizer protocol.
 
 Every event serialises to a JSON dict with at least ``type`` and ``ts`` fields.
 The ``to_json`` method returns the serialised bytes ready for WebSocket transmission.

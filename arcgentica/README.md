@@ -35,6 +35,16 @@ agent spawn/call/chunk/exit events to the server. Game actions (grid snapshots)
 are pushed separately by `submit_action`. The server broadcasts everything to
 connected frontends and writes every event to the log file.
 
+## Enabling the visualizer
+
+Set the `VISUALIZE` environment variable before running the agent:
+
+```
+VISUALIZE=1 uv run ...
+```
+
+Or pass `visualize=True` when constructing the `Agentica` agent in code.
+
 ## Frontend & replay
 
 The frontend (`arcgentica_frontend/index.html`) is a single self-contained HTML

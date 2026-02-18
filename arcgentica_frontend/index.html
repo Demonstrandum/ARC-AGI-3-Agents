@@ -1141,6 +1141,7 @@ const replaySpeed = document.getElementById("replay-speed");
 
 let replayTimerId = null;
 let replayPlaying = false;
+let replayToManuallySet = false;
 
 replayToggle.addEventListener("click", () => {
   const open = replayPanel.classList.toggle("open");
@@ -1152,10 +1153,10 @@ function updateReplayRange() {
   const max = Math.max(0, snapshots.length - 1);
   replayFrom.max = max;
   replayTo.max = max;
-  if (parseInt(replayTo.value) < parseInt(replayFrom.value)) {
+  if (!replayToManuallySet) {
     replayTo.value = max;
   }
-  if (snapshots.length && parseInt(replayTo.value) === 0 && max > 0) {
+  if (parseInt(replayTo.value) < parseInt(replayFrom.value)) {
     replayTo.value = max;
   }
 }
@@ -1219,6 +1220,7 @@ replayFrom.addEventListener("change", () => {
   selectSnapshot(v);
 });
 replayTo.addEventListener("change", () => {
+  replayToManuallySet = true;
   let v = parseInt(replayTo.value) || 0;
   v = Math.max(0, Math.min(v, snapshots.length - 1));
   replayTo.value = v;

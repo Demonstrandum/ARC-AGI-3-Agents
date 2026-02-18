@@ -1,4 +1,6 @@
-"""Color constants for ARC-AGI-3 grids."""
+"""
+Color constants for ARC-AGI-3 grids.
+"""
 
 COLOR_NAMES: tuple[str, ...] = (
     "white",

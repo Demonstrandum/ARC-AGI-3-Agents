@@ -1,4 +1,6 @@
-"""Custom AgentLogger that pushes all events to the EventServer over WebSocket."""
+"""
+Custom AgentLogger that pushes all events to the EventServer over WebSocket.
+"""
 
 from typing import override
 
@@ -15,12 +17,16 @@ from .server import EventServer
 
 
 def _log_id_int(lid: LogId) -> int:
-    """Extract the integer id from a LogId, working around the DefaultLogId.lid typo."""
+    """
+    Extract the integer id from a LogId, working around the DefaultLogId.lid typo.
+    """
     return lid.id  # type: ignore[union-attr]
 
 
 class WsLogger(AgentLogger):
-    """AgentLogger that serialises lifecycle and chunk events to an EventServer."""
+    """
+    AgentLogger that serialises lifecycle and chunk events to an EventServer.
+    """
 
     local_id: LogId | None
     parent_local_id: LogId | None

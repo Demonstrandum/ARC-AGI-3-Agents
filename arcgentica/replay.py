@@ -1,4 +1,5 @@
-"""Replay a saved visualizer session over WebSocket.
+"""
+Replay a saved visualizer session over WebSocket.
 
 Usage:
     python -m arcgentica.replay <logfile.jsonl> [--speed 1.0] [--port 8765]
