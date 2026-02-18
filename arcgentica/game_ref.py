@@ -78,8 +78,13 @@ and you want to avoid anchoring on stale assumptions.
 Hypothesis-forming agents only need observations (text/data). This prevents confused
 agents from burning actions.
 
-**Action budget**: The game has limited moves. Tell action-taking agents how many moves
+**Action budget**:
+The game has limited moves. Tell action-taking agents how many moves
 they may spend (e.g. "use at most 10 actions to explore").
+You may use `make_bounded_submit_action(limit)` to create a submit_action
+that hard-caps the number of game actions a subagent can take. Pass the bounded version
+instead of the raw `submit_action`. NOOP and RESET are free and don't count toward the
+limit. Example: `bounded_sa = make_bounded_submit_action(10)` then pass `submit_action=bounded_sa`.
 
 ## Orchestration Phases
 

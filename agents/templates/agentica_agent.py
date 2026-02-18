@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from agentica import spawn
 from agentica.common import ReasoningEffort
@@ -19,6 +19,16 @@ from ..agent import Agent
 from ..tracing import trace_agent_session
 
 logger = logging.getLogger()
+
+ActionName = Literal[
+    "RESET",
+    "ACTION1",
+    "ACTION2",
+    "ACTION3",
+    "ACTION4",
+    "ACTION5",
+    "ACTION6",
+]
 
 MAIN_AGENT_MODEL: str = "anthropic/claude-opus-4-6"
 SUBAGENT_MODEL: str = "anthropic/claude-opus-4-6"
@@ -101,7 +111,10 @@ class Agentica(Agent):
             self.action_counter += 1
             if action is GameAction.RESET:
                 has_moves_since_reset = False
-            elif last_frame is not None and raw.levels_completed != last_frame.levels_completed:
+            elif (
+                last_frame is not None
+                and raw.levels_completed != last_frame.levels_completed
+            ):
                 # Level transition: engine called set_level() which zeroed
                 # _action_count, so the next RESET would be a full_reset.
                 has_moves_since_reset = False
@@ -126,17 +139,25 @@ class Agentica(Agent):
                 )
             return frame
 
-        def submit_action(action_name: str, x: int = 0, y: int = 0) -> Frame:
+        def submit_action(
+            action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
+        ) -> Frame:
             """Submit a game action and receive the new frame.
 
             Args:
-                action_name: One of RESET, ACTION1-ACTION6
+                action_name: One of RESET, ACTION1-ACTION6.
+                    You can also pass "NOOP" to retrieve the current frame
+                    without taking any action or incrementing the action count.
                 x: X coordinate (0-63), only for ACTION6
                 y: Y coordinate (0-63), only for ACTION6
 
             Returns:
                 Frame with the new game state, grid, and available actions.
             """
+            if action_name.upper() == "NOOP":
+                # Last frame will not be `None` since RESET is always called before any other action.
+                return last_frame  # type: ignore[return-value]
+
             action = GameAction.from_name(action_name)
 
             if (
@@ -183,6 +204,40 @@ class Agentica(Agent):
 
         return submit_action
 
+    @staticmethod
+    def _make_bounded_submit_action(inner, limit: int):
+        """Wrap an existing submit_action with a hard action budget.
+
+        The returned function delegates to `inner` for all calls. It shares
+        inner's closure state (last_frame, has_moves_since_reset, etc.) so
+        RESET guards and NOOP work correctly.
+
+        Args:
+            inner: The submit_action to wrap.
+            limit: Maximum number of non-NOOP, non-RESET actions allowed.
+        """
+        remaining = limit
+
+        def bounded(
+            action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
+        ) -> Frame:
+            nonlocal remaining
+            upper = action_name.upper()
+            if upper != "NOOP" and upper != "RESET":
+                if remaining <= 0:
+                    raise ValueError(
+                        f"Action budget exhausted: all {limit} actions have been used."
+                    )
+                remaining -= 1
+            return inner(action_name, x, y)
+
+        bounded.__doc__ = (
+            (inner.__doc__ or "")
+            + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
+        )
+        bounded.__name__ = "submit_action"
+        return bounded
+
     async def spawn_agent(self, system_prompt: str | None = None):
         """Spawn a new subagent that can be called repeatedly.
 
@@ -216,6 +271,24 @@ class Agentica(Agent):
 
         submit_action = self._make_submit_action(server=server)
 
+        # TODO: future idea --- also allow restricting to a subset of actions, e.g. only ACTION1-ACTION4.
+        #       determine if this is useful for any of the games.
+        def make_bounded_submit_action(limit: int):
+            """Create a new ``submit_action`` function with a hard action budget.
+
+            Returns a ``submit_action`` that works identically to the normal one,
+            but raises ValueError after ``limit`` game actions have been taken.
+            NOOP and RESET are free and do not count toward the limit.
+
+            Use this to enforce action budgets on subagents:
+                bounded_sa = make_bounded_submit_action(10)
+                await agent.call(..., submit_action=bounded_sa)
+
+            Args:
+                limit: Maximum number of game actions (ACTION1-ACTION6) allowed.
+            """
+            return Agentica._make_bounded_submit_action(submit_action, limit)
+
         # Double RESET guarantees a completely fresh game
         initial_raw = self.take_action(GameAction.RESET)
         if initial_raw:
@@ -236,7 +309,8 @@ class Agentica(Agent):
         actions = ", ".join(initial_frame.available_actions)
         return await orchestrator.call(
             None,
-            f"New game. Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
+            f"You are playing the game `{self.game_id}`. "
+            f"Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
             f"{remaining} actions remaining.\n"
             f"Available actions for this level: {actions}\n\n"
             "Take a moment to plan your approach before spawning any agents. "
@@ -244,6 +318,7 @@ class Agentica(Agent):
             "`initial_frame`, and `GAME_REFERENCE`.",
             initial_frame=initial_frame,
             submit_action=submit_action,
+            make_bounded_submit_action=make_bounded_submit_action,
             GAME_REFERENCE=GAME_REFERENCE,
         )
 
