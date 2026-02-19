@@ -504,13 +504,10 @@
 
   /* ── Connection status ─────────────────────────────────── */
   #status {
-    position: fixed;
-    top: 8px;
-    right: 8px;
+    margin-left: auto;
     font-size: 11px;
-    padding: 4px 10px;
+    padding: 2px 8px;
     border-radius: 4px;
-    z-index: 100;
   }
 
   #status.connected { background: #166534; color: var(--green); }
@@ -530,8 +527,6 @@
 </head>
 <body>
 
-<div id="status" class="connecting">Connecting...</div>
-
 <div id="app">
   <div id="grid-panel">
     <header>
@@ -540,6 +535,7 @@
       <span class="badge badge-level" id="hud-level">Level ?/?</span>
       <span class="badge badge-actions" id="hud-actions">Action #0</span>
       <span class="badge badge-state-NOT_FINISHED" id="hud-state">NOT_FINISHED</span>
+      <span id="status" class="connecting">Connecting...</span>
     </header>
     <canvas id="grid-canvas" width="512" height="512"></canvas>
     <div id="action-buttons">

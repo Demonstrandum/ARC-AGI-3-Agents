@@ -32,7 +32,12 @@ RESET behavior: RESET restarts the CURRENT level without losing progress.
 
 Every action counts. Be efficient -- don't take exploratory actions you've already
   taken, don't RESET unless you're actually stuck, and prefer targeted experiments
-  over exhaustive sweeps.
+  over exhaustive sweeps. The action budget is tied to the submit_action function
+  itself, not to any agent. Spawning a sub-subagent and passing it the same
+  submit_action does NOT reset the budget -- they share the same counter.
+
+Do not print() or display strings back to yourself. No one else can see your REPL
+  output, and all it does is duplicate data in your context window, wasting tokens.
 
 Methodology: It is fine to execute a planned sequence of actions when you are
   confident in your hypothesis. But if the outcome is not what you expected,
@@ -40,15 +45,43 @@ Methodology: It is fine to execute a planned sequence of actions when you are
   a post-hoc analysis of what actually happened step by step, find where reality
   diverged from your theory, and figure out WHY before attempting a new approach.
 
+Look at the grid. Statistics like color_counts() and bounding_box() are useful
+  summaries, but they are lossy -- they throw away spatial structure. Regularly
+  render the grid (or a cropped region of interest) and actually read it. Many
+  patterns are only visible in the spatial layout and will never show up in
+  aggregate numbers. Do not fly blind on statistics alone.
+
+Watch for surprises. Your actions may have consequences you did not anticipate:
+  new colors appearing, objects moving, regions changing, UI elements updating.
+  After any action, diff the result against your expectation. If something new
+  or unexpected shows up, do not ignore it -- investigate it. Try to interact
+  with it, figure out what it is, and update your mental model of the game.
+  Unanticipated changes are often the most important clues.
+
 Knowing when to stop: If you have tried 2-3 variations of an approach and none
   produce the expected result, do NOT keep trying. Return to your caller with a
   clear report of what you tried, what happened, and what you think went wrong.
   Fresh eyes (a new agent) will do better than grinding on a stale theory.
 
-history(n=50) — list of (action_name, Frame) pairs for the last n actions, oldest
-  first. Covers ALL agents, not just the current one. Use this to review what
-  happened after a sequence of actions, or to understand the game state inherited
-  from a previous agent. This is a synchronous function, do NOT use await.
+history(n=50, wins_only=False) — list of (action_name, Frame) pairs for the last
+  n actions, oldest first. Covers ALL agents, not just the current one. Use this
+  to review what happened after a sequence of actions, or to understand the game
+  state inherited from a previous agent. This is a synchronous function, do NOT
+  use await.
+  Pass wins_only=True to get only level-completing actions. Each returned
+  frame's winning_frame is the full Frame of the level in its solved state.
+
+Frame attributes:
+  frame.grid — the current level's grid (2D list of ints).
+  frame.winning_frame — a full Frame of the just-completed level if this action
+    triggered a level transition, otherwise None. When you solve a level, the
+    returned frame's grid already shows the NEW level, but winning_frame preserves
+    the solved state as a complete Frame with all helpers (render, diff, find, etc.)
+    so you can study what the winning configuration looked like.
+  frame.state — NOT_FINISHED (playing), WIN (all levels beaten), GAME_OVER (lost)
+  frame.levels_completed — levels beaten so far (current level index)
+  frame.win_levels — total levels needed to win
+  frame.available_actions — list of valid action names
 
 Frame helpers:
   frame.render(keys, y_ticks, x_ticks, crop) — text render; crop=(x1,y1,x2,y2) to zoom
@@ -60,12 +93,7 @@ Frame helpers:
     Changed cells show new value; unchanged show ".".
   frame.find(*colors) — [(x, y, value), ...] for matching pixels
   frame.bounding_box(*colors) — (x1, y1, x2, y2) of matching pixels
-  frame.color_counts() — dict of color → count
-  frame.grid — raw 2D list
-  frame.state — NOT_FINISHED (playing), WIN (all levels beaten), GAME_OVER (lost)
-  frame.levels_completed — levels beaten so far (current level index)
-  frame.win_levels — total levels needed to win
-  frame.available_actions — list of valid action names"""
+  frame.color_counts() — dict of color → count"""
 
 SYSTEM_PROMPT = f"""You are the top-level ORCHESTRATOR for an ARC-AGI-3 game.
 
@@ -89,6 +117,8 @@ creates a budgeted submit_action to hand to subagents. You cannot play the game.
   `agent = await spawn_agent("You are an explorer.\n\n" + GAME_REFERENCE)`
 - `result = await agent.call(return_type, task, **objects)` — call it
 - The same agent can be called multiple times; it retains context between calls.
+  If a subagent's report is unclear or incomplete, call it again and ask for
+  clarification or more detail -- don't guess based on a vague summary.
 - Subagents can also call `spawn_agent()` to create their own sub-subagents.
 - Always pass `GAME_REFERENCE=GAME_REFERENCE` and `history=history` to every subagent.
 

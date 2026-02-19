@@ -33,7 +33,7 @@ ActionName = Literal[
 ]
 
 MAIN_AGENT_MODEL: str = "anthropic/claude-opus-4-6"
-SUBAGENT_MODEL: str = "anthropic/claude-sonnet-4-6"
+SUBAGENT_MODEL: str = "anthropic/claude-opus-4-6"
 REASONING_EFFORT: ReasoningEffort = "high"
 
 
@@ -213,7 +213,9 @@ class Agentica(Agent):
 
             raise ValueError("Action failed — no frame returned.")
 
-        def history(n: int = _MAX_HISTORY) -> list[tuple[str, Frame]]:
+        def history(
+            n: int = _MAX_HISTORY, wins_only: bool = False
+        ) -> list[tuple[str, Frame]]:
             """
             Return the last n (action_name, Frame) pairs from the game, oldest first.
             This is a synchronous function, do NOT use await.
@@ -224,8 +226,16 @@ class Agentica(Agent):
 
             Args:
                 n: How many recent entries to return. Defaults to 50 (the max stored).
+                wins_only: If True, return only entries where frame.winning_frame is
+                    not None (i.e. actions that completed a level). Useful for
+                    reviewing what the winning state looked like on past levels.
             """
-            entries = list(_action_history)
+            if wins_only:
+                entries = [
+                    (a, f) for a, f in _action_history if f.winning_frame is not None
+                ]
+            else:
+                entries = list(_action_history)
             return entries[-n:] if n < len(entries) else entries
 
         return submit_action, history
@@ -244,15 +254,7 @@ class Agentica(Agent):
             limit: Maximum non-NOOP, non-RESET actions allowed, or None for unlimited.
         """
         if limit is None:
-
-            def unbounded(
-                action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
-            ) -> Frame:
-                return inner(action_name, x, y)
-
-            unbounded.__doc__ = inner.__doc__
-            unbounded.__name__ = "submit_action"
-            return unbounded
+            return inner
 
         remaining = limit
 
@@ -294,6 +296,7 @@ class Agentica(Agent):
             reasoning_effort=REASONING_EFFORT,
             scope={
                 "spawn_agent": self.spawn_agent,
+                "numpy": np,
                 "np": np,
             },
         )
@@ -347,6 +350,7 @@ class Agentica(Agent):
             reasoning_effort=REASONING_EFFORT,
             scope={
                 "spawn_agent": self.spawn_agent,
+                "numpy": np,
                 "np": np,
             },
         )

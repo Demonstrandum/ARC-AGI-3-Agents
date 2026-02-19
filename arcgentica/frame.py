@@ -122,7 +122,11 @@ class Frame:
     Wrapper around FrameData with grid inspection helpers.
 
     Attributes:
-        grid: 2D list[list[int]] — the first layer of the frame.
+        grid: 2D list[list[int]] — the current level's grid.
+        winning_frame: A full Frame of the just-completed level when a level
+            transition occurred on this action, otherwise None. Has all the
+            same helpers (render, diff, find, etc.) so you can inspect what
+            the winning state looked like.
         state: Current GameState (NOT_FINISHED, WIN, GAME_OVER).
         levels_completed: Levels beaten so far.
         win_levels: Total levels required to win the game.
@@ -133,12 +137,13 @@ class Frame:
 
     _data: FrameData
     grid: list[list[int]]
+    winning_frame: "Frame | None"
     state: GameState
     levels_completed: int
     win_levels: int
     game_id: str
 
-    __slots__ = ("_data", "grid", "state", "levels_completed", "win_levels", "game_id")
+    __slots__ = ("_data", "grid", "winning_frame", "state", "levels_completed", "win_levels", "game_id")
 
     def __init__(self, data: FrameData) -> None:
         self._data = data
@@ -147,6 +152,18 @@ class Frame:
         self.levels_completed = data.levels_completed
         self.win_levels = data.win_levels
         self.game_id = data.game_id
+        if len(data.frame) > 1:
+            win: Frame = object.__new__(Frame)
+            win._data = data
+            win.grid = data.frame[0]
+            win.winning_frame = None
+            win.state = data.state
+            win.levels_completed = data.levels_completed - 1
+            win.win_levels = data.win_levels
+            win.game_id = data.game_id
+            self.winning_frame = win
+        else:
+            self.winning_frame = None
 
     @property
     def width(self) -> int:

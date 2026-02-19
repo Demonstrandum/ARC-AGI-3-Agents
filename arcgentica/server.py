@@ -140,9 +140,8 @@ class EventServer:
         msg = event.to_json()
         with self._lock:
             self._buffer.append(msg)
-            if self._log_file is not None:
-                self._log_file.write(msg + "\n")
-                self._log_file.flush()
+        if self._log_file is not None:
+            self._log_file.write(msg + "\n")
         loop = self._loop
         if loop is not None and self._clients:
             loop.call_soon_threadsafe(self._schedule_broadcast, msg)
