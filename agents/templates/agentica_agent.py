@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 from agentica import spawn
 from agentica.common import ReasoningEffort
 from agentica.logging import AgentListener, set_default_agent_listener
@@ -31,7 +33,7 @@ ActionName = Literal[
 ]
 
 MAIN_AGENT_MODEL: str = "anthropic/claude-opus-4-6"
-SUBAGENT_MODEL: str = "anthropic/claude-opus-4-6"
+SUBAGENT_MODEL: str = "anthropic/claude-sonnet-4-6"
 REASONING_EFFORT: ReasoningEffort = "high"
 
 
@@ -102,12 +104,14 @@ class Agentica(Agent):
         Create the submit_action tool function for the agentica agent.
         """
 
+        _MAX_HISTORY = 50
         last_available: list[int] = []
         # True when a non-RESET action has been taken since the last reset.
         # When False, the engine's _action_count is 0 and a RESET would
         # trigger a destructive full_reset back to level 0.
         has_moves_since_reset: bool = False
         last_frame: Frame | None = None
+        _action_history: deque[tuple[str, Frame]] = deque(maxlen=_MAX_HISTORY)
 
         def _push_frame(action: GameAction, raw: FrameData) -> Frame:
             nonlocal last_available, has_moves_since_reset, last_frame
@@ -131,6 +135,7 @@ class Agentica(Agent):
             )
             frame = Frame(raw)
             last_frame = frame
+            _action_history.append((action.name, frame))
             self._log_action(action, frame)
             if server is not None:
                 cx = action.action_data.x if action.is_complex() else None
@@ -208,12 +213,27 @@ class Agentica(Agent):
 
             raise ValueError("Action failed — no frame returned.")
 
-        return submit_action
+        def history(n: int = _MAX_HISTORY) -> list[tuple[str, Frame]]:
+            """
+            Return the last n (action_name, Frame) pairs from the game, oldest first.
+            This is a synchronous function, do NOT use await.
+
+            Covers actions taken by ALL agents (not just the current one). Use this
+            to review what happened after executing a sequence of actions, or to
+            understand the game state before you started.
+
+            Args:
+                n: How many recent entries to return. Defaults to 50 (the max stored).
+            """
+            entries = list(_action_history)
+            return entries[-n:] if n < len(entries) else entries
+
+        return submit_action, history
 
     @staticmethod
-    def _make_bounded_submit_action(inner, limit: int):
+    def _make_bounded_submit_action(inner, limit: int | None):
         """
-        Wrap an existing submit_action with a hard action budget.
+        Wrap an existing submit_action, optionally with a hard action budget.
 
         The returned function delegates to `inner` for all calls. It shares
         inner's closure state (last_frame, has_moves_since_reset, etc.) so
@@ -221,8 +241,19 @@ class Agentica(Agent):
 
         Args:
             inner: The submit_action to wrap.
-            limit: Maximum number of non-NOOP, non-RESET actions allowed.
+            limit: Maximum non-NOOP, non-RESET actions allowed, or None for unlimited.
         """
+        if limit is None:
+
+            def unbounded(
+                action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
+            ) -> Frame:
+                return inner(action_name, x, y)
+
+            unbounded.__doc__ = inner.__doc__
+            unbounded.__name__ = "submit_action"
+            return unbounded
+
         remaining = limit
 
         def bounded(
@@ -263,6 +294,7 @@ class Agentica(Agent):
             reasoning_effort=REASONING_EFFORT,
             scope={
                 "spawn_agent": self.spawn_agent,
+                "np": np,
             },
         )
 
@@ -279,16 +311,17 @@ class Agentica(Agent):
         else:
             set_default_agent_listener(None)
 
-        submit_action = self._make_submit_action(server=server)
+        submit_action, history = self._make_submit_action(server=server)
 
         # TODO: future idea --- also allow restricting to a subset of actions, e.g. only ACTION1-ACTION4.
         #       determine if this is useful for any of the games.
-        def make_bounded_submit_action(limit: int):
+        def make_bounded_submit_action(limit: int | None):
             """
-            Create a new ``submit_action`` function with a hard action budget.
+            Create a new ``submit_action`` function, optionally with a hard action budget.
 
-            Returns a ``submit_action`` that works identically to the normal one,
-            but raises ValueError after ``limit`` game actions have been taken.
+            Returns a ``submit_action`` that works identically to the normal one.
+            If ``limit`` is an int, raises ValueError after that many game actions.
+            If ``limit`` is None, the returned function is unbounded.
             NOOP and RESET are free and do not count toward the limit.
 
             Use this to enforce action budgets on subagents:
@@ -296,7 +329,7 @@ class Agentica(Agent):
                 await agent.call(..., submit_action=bounded_sa)
 
             Args:
-                limit: Maximum number of game actions (ACTION1-ACTION6) allowed.
+                limit: Max game actions (ACTION1-ACTION6) allowed, or None for unlimited.
             """
             return Agentica._make_bounded_submit_action(submit_action, limit)
 
@@ -314,6 +347,7 @@ class Agentica(Agent):
             reasoning_effort=REASONING_EFFORT,
             scope={
                 "spawn_agent": self.spawn_agent,
+                "np": np,
             },
         )
         remaining = self.MAX_ACTIONS - self.action_counter
@@ -325,11 +359,11 @@ class Agentica(Agent):
             f"{remaining} actions remaining.\n"
             f"Available actions for this level: {actions}\n\n"
             "Take a moment to plan your approach before spawning any agents. "
-            "When ready, spawn an explorer and give it `submit_action`, "
+            "When ready, spawn an explorer and give it a bounded submit_action, "
             "`initial_frame`, and `GAME_REFERENCE`.",
             initial_frame=initial_frame,
-            submit_action=submit_action,
             make_bounded_submit_action=make_bounded_submit_action,
+            history=history,
             GAME_REFERENCE=GAME_REFERENCE,
         )
 
