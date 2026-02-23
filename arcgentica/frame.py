@@ -160,7 +160,7 @@ class Frame:
         "_frozen",
     )
 
-    def __init__(self, data: FrameData) -> None:
+    def __init__(self, data: FrameData, *, prev_levels_completed: int | None = None) -> None:
         object.__setattr__(self, "_frozen", False)
         self._data = data
         raw_grid = data.frame[-1]
@@ -170,7 +170,12 @@ class Frame:
         self.levels_completed = data.levels_completed
         self.win_levels = data.win_levels
         self.game_id = data.game_id
-        if len(data.frame) > 1:
+        level_transition = (
+            prev_levels_completed is not None
+            and data.levels_completed > prev_levels_completed
+            and len(data.frame) > 1
+        )
+        if level_transition:
             win: Frame = object.__new__(Frame)
             object.__setattr__(win, "_frozen", False)
             win._data = data
@@ -179,7 +184,7 @@ class Frame:
             win._grid_array = None
             win.winning_frame = None
             win.state = data.state
-            win.levels_completed = data.levels_completed - 1
+            win.levels_completed = prev_levels_completed  # type: ignore[assignment]
             win.win_levels = data.win_levels
             win.game_id = data.game_id
             object.__setattr__(win, "_frozen", True)
@@ -265,22 +270,22 @@ class Frame:
 
     def diff(self, other: Self, margin: int = 2) -> list[DiffRegion]:
         """
-        Cells that changed between self and other, grouped by contiguous region.
+        Cells that changed between ``old_frame`` (``other``) and ``new_frame`` (``self``).
 
-        Changes within *margin* pixels of each other are merged into the same
-        DiffRegion.  Each region has a bounding box and a list of individual
-        cell changes ``(x, y, old_val, new_val)``.
+        Call as ``new_frame.diff(old_frame)``.  Returns a list of DiffRegions,
+        each with a bounding box and individual cell changes
+        ``(x, y, old_val, new_val)``.  Changes within *margin* pixels of each
+        other are merged into the same region.
 
-        Tip: call ``diff()`` first to identify regions, then use
-        ``render_diff(other, crop=(r.x0, r.y0, r.x1, r.y1))`` to visualize
-        a specific region.
+        Tip: use region bounds to zoom in:
+        ``new_frame.render_diff(old_frame, crop=(r.x0, r.y0, r.x1, r.y1))``.
         """
         changes: list[tuple[int, int, int, int]] = []
         for y in range(min(self.height, other.height)):
             self_row, other_row = self.grid[y], other.grid[y]
             for x in range(min(len(self_row), len(other_row))):
                 if self_row[x] != other_row[x]:
-                    changes.append((x, y, self_row[x], other_row[x]))
+                    changes.append((x, y, other_row[x], self_row[x]))
         return _cluster_changes(changes, margin=margin)
 
     def render_diff(
@@ -291,7 +296,7 @@ class Frame:
         crop: tuple[int, int, int, int] | Literal["auto"] | None = None,
     ) -> str:
         """
-        Render a visual diff showing what changed between self and other.
+        Render a visual diff.  Call as ``new_frame.render_diff(old_frame)``.
 
         Args:
             keys: Character map for color values 0-15.
@@ -357,7 +362,7 @@ class Frame:
 
     def change_summary(self, other: Self, margin: int = 2) -> str:
         """
-        One-line-per-region summary of what changed between self and other.
+        One-line-per-region summary.  Call as ``new_frame.change_summary(old_frame)``.
 
         Returns region bounding boxes, cell counts, and color transitions.
         Example output::
@@ -373,7 +378,7 @@ class Frame:
         """
         if self.levels_completed != other.levels_completed:
             return (
-                f"Level changed ({self.levels_completed} → {other.levels_completed}). "
+                f"Level changed ({other.levels_completed} → {self.levels_completed}). "
                 f"Inspect the new grid directly."
             )
         regions = self.diff(other, margin=margin)

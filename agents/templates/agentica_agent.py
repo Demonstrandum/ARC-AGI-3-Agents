@@ -142,7 +142,8 @@ class Agentica(Agent):
                 f"{self.game_id} - {action.name}: count {self.action_counter}, "
                 f"level {raw.levels_completed}/{raw.win_levels}"
             )
-            frame = Frame(raw)
+            prev_lc = last_frame.levels_completed if last_frame is not None else None
+            frame = Frame(raw, prev_levels_completed=prev_lc)
             last_frame = frame
             _action_history.append((action.name, frame))
             self._log_action(action, frame)
