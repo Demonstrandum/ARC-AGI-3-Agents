@@ -11,6 +11,7 @@ Run: uv run python -m pytest tests/test_smoke.py -v
 import json
 
 import numpy as np
+import pytest
 from arcengine import FrameData, GameState
 
 from arcgentica.events import (
@@ -61,6 +62,23 @@ class TestFrame:
         assert isinstance(rendered, str)
         assert len(rendered) > 0
 
+    def test_immutable(self):
+        f = Frame(_make_frame_data())
+        with pytest.raises(AttributeError, match="immutable"):
+            f.grid = ((1,),)
+        with pytest.raises(AttributeError, match="immutable"):
+            f.state = GameState.WIN
+        with pytest.raises(AttributeError, match="immutable"):
+            del f.grid
+
+    def test_grid_np(self):
+        f = Frame(_make_frame_data(pixel=3))
+        arr = f.grid_np
+        assert arr.shape == (64, 64)
+        assert arr.dtype == np.int8
+        assert not arr.flags.writeable
+        assert arr is f.grid_np  # cached
+
     def test_diff_identical_frames(self):
         fd = _make_frame_data()
         f1 = Frame(fd)
@@ -70,10 +88,18 @@ class TestFrame:
 
     def test_diff_single_change(self):
         fd1 = _make_frame_data(pixel=0)
-        fd2 = _make_frame_data(pixel=0)
+        grid2 = np.zeros((64, 64), dtype=int)
+        grid2[10, 20] = 5
+        fd2 = FrameData(
+            game_id="test-dry-run",
+            frame=[grid2.tolist()],
+            state=GameState.NOT_FINISHED,
+            levels_completed=0,
+            win_levels=3,
+            available_actions=[1, 2, 3, 4],
+        )
         f1 = Frame(fd1)
         f2 = Frame(fd2)
-        f2.grid[10][20] = 5
         regions = f1.diff(f2)
         assert len(regions) == 1
         assert regions[0].count == 1

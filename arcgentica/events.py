@@ -7,6 +7,7 @@ The ``to_json`` method returns the serialised bytes ready for WebSocket transmis
 
 import json
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -119,7 +120,7 @@ class GameActionEvent:
     level: int
     win_levels: int
     state: str
-    grid: list[list[int]]
+    grid: Sequence[Sequence[int]]
     available_actions: list[str]
     click_x: int | None = None
     click_y: int | None = None

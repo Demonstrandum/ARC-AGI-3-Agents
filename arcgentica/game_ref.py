@@ -7,9 +7,11 @@ from .models import SUBAGENT_MAX_CONTEXT
 
 GAME_REFERENCE = f"""This is a visual game designed for humans. You see it as a 64x64
 coordinate grid of integers 0-15 ({COLOR_LEGEND}), due to the nature and limitations of your interface.
-You use coordinates to identify positions and click, but game mechanics never depend on absolute coordinate
-values -- they depend on shapes, spatial relationships between objects, colors, and
-patterns.
+You use coordinates to identify positions and click, but game mechanics and win
+conditions are about relationships between elements, not positions on the grid.
+Think "element must reach the goal" not "element must reach row 38." If your
+hypothesis includes a specific coordinate as part of the goal, it is wrong --
+restate it in terms of what must relate to what.
 Render the grid and read it as a picture.
 
 Grid origin (0,0) at top-left, X rightward, Y downward.
@@ -67,12 +69,13 @@ Look at the grid. Statistics like color_counts() and bounding_box() are useful
   patterns are only visible in the spatial layout and will never show up in
   aggregate numbers. Do not fly blind on statistics alone.
 
-Watch for surprises. Your actions may have consequences you did not anticipate:
-  new colors appearing, objects moving, regions changing, UI elements updating.
-  After any action, diff the result against your expectation. If something new
-  or unexpected shows up, do not ignore it -- investigate it. Try to interact
-  with it, figure out what it is, and update your mental model of the game.
-  Unanticipated changes are often the most important clues.
+While exploring or testing hypotheses, use `new_frame.change_summary(old_frame)`
+  after each action to detect unexpected changes -- regions that changed outside
+  where you acted. If something unexpected shows up, render that region and
+  investigate. This is a detection tool, not a replacement for actually looking
+  at the grid. Use render, diff, find, or whatever else helps you understand
+  what is happening. Once you are confident in the mechanics and executing a
+  known solution, you can skip the summary and just verify the outcome.
 
 Knowing when to stop: If you have tried 2-3 variations of an approach and none
   produce the expected result, do NOT keep trying. Return to your caller with a
@@ -104,7 +107,8 @@ Shared Memory (memories):
   rediscover things other agents have already figured out.
 
 Frame attributes:
-  frame.grid -- the current level's grid (2D list of ints).
+  frame.grid -- the current level's grid (immutable 2D tuple of ints).
+  frame.grid_np -- numpy int8 array view of the grid (read-only, cached).
   frame.winning_frame -- a full Frame of the just-completed level if this action
     triggered a level transition, otherwise None. When you solve a level, the
     returned frame's grid already shows the NEW level, but winning_frame preserves
@@ -119,6 +123,8 @@ Frame attributes:
   frame.available_actions -- list of valid action names
 
 Frame helpers:
+  frame.change_summary(other) -- cheap one-line-per-region overview of all changes.
+    Use after every action to spot unexpected changes before zooming in.
   frame.render(keys, y_ticks, x_ticks, crop) -- text render; crop=(x1,y1,x2,y2) to zoom
   frame.diff(other) -- [DiffRegion(x0,y0,x1,y1, changes=[(x,y,old,new),...]), ...]
     Groups changes into contiguous regions. Use region bounds to zoom in:
@@ -201,6 +207,8 @@ agent) or refined instructions (same agent) will work better.
 
 2. **Hypothesize** -- Spawn a theorist (no `submit_action`). Feed it the explorer's
    summary. Ask it to form hypotheses about the game rules and the win condition.
+   Reject any hypothesis stated in absolute coordinates -- mechanics are always
+   relational (element reaches goal, shape completed, path connected, etc.).
 
 3. **Test** -- Either call the explorer again or spawn a tester. Give it the hypothesis
    and `submit_action` with a small action budget. Ask it to run targeted experiments

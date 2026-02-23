@@ -5,6 +5,7 @@ Frame wrapper around arcengine.FrameData with grid inspection helpers.
 from dataclasses import dataclass
 from typing import Literal, Self
 
+import numpy as np
 from arcengine import FrameData, GameAction, GameState
 
 
@@ -122,7 +123,8 @@ class Frame:
     Wrapper around FrameData with grid inspection helpers.
 
     Attributes:
-        grid: 2D list[list[int]] — the current level's grid.
+        grid: Immutable 2D tuple of ints — the current level's grid.
+        grid_np: Read-only numpy int8 array view of the grid (cached on first access).
         winning_frame: A full Frame of the just-completed level when a level
             transition occurred on this action, otherwise None. Has all the
             same helpers (render, diff, find, etc.) so you can inspect what
@@ -135,35 +137,73 @@ class Frame:
         width, height: Grid dimensions.
     """
 
-    _data: FrameData
-    grid: list[list[int]]
+    grid: tuple[tuple[int, ...], ...]
     winning_frame: "Frame | None"
     state: GameState
     levels_completed: int
     win_levels: int
     game_id: str
 
-    __slots__ = ("_data", "grid", "winning_frame", "state", "levels_completed", "win_levels", "game_id")
+    _data: FrameData
+    _grid_array: np.ndarray | None
+    _frozen: bool
+
+    __slots__ = (
+        "grid",
+        "winning_frame",
+        "state",
+        "levels_completed",
+        "win_levels",
+        "game_id",
+        "_data",
+        "_grid_array",
+        "_frozen",
+    )
 
     def __init__(self, data: FrameData) -> None:
+        object.__setattr__(self, "_frozen", False)
         self._data = data
-        self.grid = data.frame[-1]
+        raw_grid = data.frame[-1]
+        self.grid = tuple(tuple(row) for row in raw_grid)
+        self._grid_array: np.ndarray | None = None
         self.state = data.state
         self.levels_completed = data.levels_completed
         self.win_levels = data.win_levels
         self.game_id = data.game_id
         if len(data.frame) > 1:
             win: Frame = object.__new__(Frame)
+            object.__setattr__(win, "_frozen", False)
             win._data = data
-            win.grid = data.frame[0]
+            win_grid = data.frame[0]
+            win.grid = tuple(tuple(row) for row in win_grid)
+            win._grid_array = None
             win.winning_frame = None
             win.state = data.state
             win.levels_completed = data.levels_completed - 1
             win.win_levels = data.win_levels
             win.game_id = data.game_id
+            object.__setattr__(win, "_frozen", True)
             self.winning_frame = win
         else:
             self.winning_frame = None
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if self._frozen:
+            raise AttributeError(f"Frame is immutable, cannot set '{name}'")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"Frame is immutable, cannot delete '{name}'")
+
+    @property
+    def grid_np(self) -> np.ndarray:
+        """Cached numpy view of the grid (int8, read-only)."""
+        if self._grid_array is None:
+            arr = np.array(self.grid, dtype=np.int8)
+            arr.flags.writeable = False
+            object.__setattr__(self, "_grid_array", arr)
+        return self._grid_array  # type: ignore[return-value]
 
     @property
     def width(self) -> int:
@@ -315,6 +355,44 @@ class Frame:
 
         return "\n".join(lines)
 
+    def change_summary(self, other: Self, margin: int = 2) -> str:
+        """
+        One-line-per-region summary of what changed between self and other.
+
+        Returns region bounding boxes, cell counts, and color transitions.
+        Example output::
+
+            24 cells changed across 3 region(s):
+              [10,5)-[15,10): 8 cells -- 0→5 ×6, 3→5 ×2
+              [30,40)-[32,42): 4 cells -- 3→0 ×4
+              [55,60)-[60,64): 12 cells -- 0→7 ×10, 0→2 ×2
+
+        Returns "No changes." when the grids are identical.
+        Returns a short notice when a level transition occurred (the grids
+        belong to different levels so a full diff is not meaningful).
+        """
+        if self.levels_completed != other.levels_completed:
+            return (
+                f"Level changed ({self.levels_completed} → {other.levels_completed}). "
+                f"Inspect the new grid directly."
+            )
+        regions = self.diff(other, margin=margin)
+        if not regions:
+            return "No changes."
+        total = sum(r.count for r in regions)
+        lines = [f"{total} cells changed across {len(regions)} region(s):"]
+        for r in regions:
+            counts: dict[tuple[int, int], int] = {}
+            for _, _, old, new in r.changes:
+                key = (old, new)
+                counts[key] = counts.get(key, 0) + 1
+            transitions = sorted(counts.items(), key=lambda kv: -kv[1])
+            parts = ", ".join(f"{o}→{n} ×{c}" for (o, n), c in transitions)
+            lines.append(
+                f"  [{r.x0},{r.y0})-[{r.x1},{r.y1}): {r.count} cells -- {parts}"
+            )
+        return "\n".join(lines)
+
     def find(self, *colors: int) -> list[tuple[int, int, int]]:
         """
         All pixels matching any of the given color values.
@@ -322,23 +400,18 @@ class Frame:
         Returns:
             [(x, y, value), ...] sorted by (y, x).
         """
-        target = set(colors)
-        return [
-            (x, y, val)
-            for y, row in enumerate(self.grid)
-            for x, val in enumerate(row)
-            if val in target
-        ]
+        g = self.grid_np
+        mask = np.isin(g, colors)
+        ys, xs = np.where(mask)
+        vals = g[ys, xs]
+        return [(int(x), int(y), int(v)) for y, x, v in zip(ys, xs, vals)]
 
     def color_counts(self) -> dict[int, int]:
         """
         Count of each color value present in the grid.
         """
-        bins = [0] * 16
-        for row in self.grid:
-            for val in row:
-                bins[val] += 1
-        return {c: n for c, n in enumerate(bins) if n}
+        bins = np.bincount(self.grid_np.ravel(), minlength=16)
+        return {int(c): int(n) for c, n in enumerate(bins) if n}
 
     def bounding_box(self, *colors: int) -> tuple[int, int, int, int] | None:
         """
@@ -347,23 +420,11 @@ class Frame:
         At least one color must be specified.
         Returns None if no pixels match.
         """
-        target = set(colors)
-        min_x, max_x = self.width, -1
-        min_y, max_y = self.height, -1
-        for y, row in enumerate(self.grid):
-            for x, val in enumerate(row):
-                if val in target:
-                    if x < min_x:
-                        min_x = x
-                    if x > max_x:
-                        max_x = x
-                    if y < min_y:
-                        min_y = y
-                    if y > max_y:
-                        max_y = y
-        if max_x < 0:
+        mask = np.isin(self.grid_np, colors)
+        ys, xs = np.where(mask)
+        if len(ys) == 0:
             return None
-        return (min_x, min_y, max_x + 1, max_y + 1)
+        return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 
     def __repr__(self) -> str:
         actions = ", ".join(self.available_actions)
