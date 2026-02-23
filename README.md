@@ -1,6 +1,6 @@
 # ARC-AGI-3-Agents
 
-Fork of the [ARC-AGI-3 agent starter kit](https://github.com/arcprize/ARC-AGI-3-Agents). We added the **agentica** agent (see [`agentica_agent.py`](agents/templates/agentica_agent.py) and [`arcgentica/`](arcgentica/)).
+Fork of the [ARC-AGI-3 agent starter kit](https://github.com/arcprize/ARC-AGI-3-Agents). We added an **Agentica** agent harness (see [`agentica_agent.py`](agents/templates/agentica_agent.py) and [`arcgentica/`](arcgentica/)).
 
 ## Agentica
 

@@ -3,7 +3,8 @@ Game reference and system prompt strings.
 """
 
 from .colors import COLOR_LEGEND
-from .models import SUBAGENT_MAX_CONTEXT
+
+# from .models import SUBAGENT_MAX_CONTEXT
 
 GAME_REFERENCE = f"""This is a visual game designed for humans. You see it as a 64x64
 coordinate grid of integers 0-15 ({COLOR_LEGEND}), due to the nature and limitations of your interface.
@@ -178,7 +179,8 @@ creates a budgeted submit_action to hand to subagents. You cannot play the game.
 - Always pass `GAME_REFERENCE=GAME_REFERENCE`, `history=history`, and
   `memories=memories` to every subagent.
 
-## Context Window Management
+{
+    '''## Context Window Management
 
 Each subagent has a context window of {SUBAGENT_MAX_CONTEXT:,} tokens. After each
 `.call()`, check `agent.last_usage().total_tokens` -- this is the total tokens
@@ -186,6 +188,10 @@ Each subagent has a context window of {SUBAGENT_MAX_CONTEXT:,} tokens. After eac
 When this approaches {SUBAGENT_MAX_CONTEXT:,}, the agent is nearing saturation and
 its quality will degrade. Debrief it (extract its knowledge) and spawn a fresh
 replacement before it hits the wall.
+'''
+    if False  # disabled until this is added in the SDK
+    else ""
+}
 
 ## Key Orchestration Decisions
 
