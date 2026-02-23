@@ -5,17 +5,21 @@ import os
 import time
 from collections import deque
 from pathlib import Path
+from textwrap import dedent
 from typing import Any, Literal
 
 import numpy as np
 from agentica import spawn
-from agentica.common import ReasoningEffort
 from agentica.logging import AgentListener, set_default_agent_listener
 from arcengine import FrameData, GameAction, GameState
 
 from arcgentica import EventServer, WsLogger
+from arcgentica.events import UsageSummaryEvent
 from arcgentica.frame import Frame
 from arcgentica.game_ref import GAME_REFERENCE, SYSTEM_PROMPT
+from arcgentica.memories import Memories, Memory
+from arcgentica.models import MAIN_AGENT_MODEL, REASONING_EFFORT, SUBAGENT_MODEL
+from arcgentica.tracker import UsageTracker
 
 from ..agent import Agent
 from ..tracing import trace_agent_session
@@ -32,10 +36,6 @@ ActionName = Literal[
     "ACTION6",
 ]
 
-MAIN_AGENT_MODEL: str = "anthropic/claude-opus-4-6"
-SUBAGENT_MODEL: str = "anthropic/claude-opus-4-6"
-REASONING_EFFORT: ReasoningEffort = "high"
-
 
 class Agentica(Agent):
     """
@@ -51,6 +51,8 @@ class Agentica(Agent):
         super().__init__(*args, **kwargs)
         self.visualize = visualize or os.environ.get("VISUALIZE", "") == "1"
         self._server: EventServer | None = None
+        self._tracker: UsageTracker | None = None
+        self._pending_reasoning: dict[str, object] | None = None
         self._action_log_dir: Path | None = None
         self._action_log_file: Any = None
         self._logged_level: int = -1
@@ -89,6 +91,13 @@ class Agentica(Agent):
         if self._action_log_file is not None:
             self._action_log_file.close()
             self._action_log_file = None
+
+    def do_action_request(self, action: GameAction) -> FrameData:
+        data = action.action_data.model_dump()
+        reasoning = self._pending_reasoning or {}
+        self._pending_reasoning = None
+        raw = self.arc_env.step(action, data=data, reasoning=reasoning)
+        return self._convert_raw_frame_data(raw)
 
     # Required abstract methods (not used since we override main)
     def is_done(self, frames: list[FrameData], latest_frame: FrameData) -> bool:
@@ -147,6 +156,17 @@ class Agentica(Agent):
                     click_x=cx,
                     click_y=cy,
                 )
+                if self._tracker is not None:
+                    t = self._tracker.total_usage()
+                    server.push(
+                        UsageSummaryEvent(
+                            input_tokens=t.input_tokens,
+                            output_tokens=t.output_tokens,
+                            cached_tokens=t.cached_tokens,
+                            reasoning_tokens=t.reasoning_tokens,
+                            total_tokens=t.total_tokens,
+                        )
+                    )
             return frame
 
         def submit_action(
@@ -193,6 +213,15 @@ class Agentica(Agent):
 
             if action.is_complex():
                 action.set_data({"x": x, "y": y})
+
+            if self._tracker is not None:
+                reasoning = self._tracker.drain_reasoning()
+                if reasoning is not None:
+                    reasoning["level"] = (
+                        last_frame.levels_completed if last_frame else 0
+                    )
+                    reasoning["action_count"] = self.action_counter
+                self._pending_reasoning = reasoning
 
             raw = self.take_action(action)
 
@@ -272,7 +301,7 @@ class Agentica(Agent):
             return inner(action_name, x, y)
 
         bounded.__doc__ = (
-            (inner.__doc__ or "")
+            dedent(inner.__doc__ or "")
             + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
         )
         bounded.__name__ = "submit_action"
@@ -298,6 +327,8 @@ class Agentica(Agent):
                 "spawn_agent": self.spawn_agent,
                 "numpy": np,
                 "np": np,
+                "Memories": Memories,
+                "Memory": Memory,
             },
         )
 
@@ -305,14 +336,17 @@ class Agentica(Agent):
         """
         Async entry point: spawn agentica agent and let it play.
         """
+        tracker = UsageTracker()
+        self._tracker = tracker
+
         server: EventServer | None = None
         if self.visualize:
             server = EventServer(game_id=self.game_id)
             await server.start()
             self._server = server
-            set_default_agent_listener(lambda: AgentListener(WsLogger(server)))
-        else:
-            set_default_agent_listener(None)
+        set_default_agent_listener(
+            lambda: AgentListener(WsLogger(server, tracker=tracker))
+        )
 
         submit_action, history = self._make_submit_action(server=server)
 
@@ -352,24 +386,46 @@ class Agentica(Agent):
                 "spawn_agent": self.spawn_agent,
                 "numpy": np,
                 "np": np,
+                "Memories": Memories,
+                "Memory": Memory,
             },
         )
+
         remaining = self.MAX_ACTIONS - self.action_counter
         actions = ", ".join(initial_frame.available_actions)
+
+        memories = Memories()  # the shared memories database
+
         return await orchestrator.call(
             None,
             f"You are playing the game `{self.game_id}`. "
             f"Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
             f"{remaining} actions remaining.\n"
             f"Available actions for this level: {actions}\n\n"
+            "You have a shared `memories` database — pass it to every subagent "
+            "so they can read prior knowledge and write new discoveries as they go. "
+            "This persists across agent lifetimes, so use it as the primary way to "
+            "accumulate and transfer knowledge.\n\n"
             "Take a moment to plan your approach before spawning any agents. "
             "When ready, spawn an explorer and give it a bounded submit_action, "
-            "`initial_frame`, and `GAME_REFERENCE`.",
+            "`initial_frame`, `memories`, and `GAME_REFERENCE`.",
             initial_frame=initial_frame,
             make_bounded_submit_action=make_bounded_submit_action,
             history=history,
+            memories=memories,
             GAME_REFERENCE=GAME_REFERENCE,
         )
+
+    def _write_usage(self) -> None:
+        if self._tracker is None:
+            return
+        print("\n" + self._tracker.summary() + "\n")
+        if self._action_log_dir is None:
+            self._action_log_dir = Path("actions_log") / self.game_id
+            self._action_log_dir.mkdir(parents=True, exist_ok=True)
+        path = self._action_log_dir / "usage.json"
+        path.write_text(json.dumps(self._tracker.to_dict(), indent=2))
+        logger.info(f"Token usage written to {path}")
 
     @trace_agent_session
     def main(self) -> None:
@@ -380,7 +436,8 @@ class Agentica(Agent):
         try:
             asyncio.run(self._run())
         finally:
+            self._write_usage()
             self._close_action_log()
             if self._server is not None:
-                asyncio.run(self._server.stop())
+                self._server._close_log()
             self.cleanup()

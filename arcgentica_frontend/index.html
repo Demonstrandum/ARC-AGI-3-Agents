@@ -75,10 +75,11 @@
     border: 1px solid var(--border);
   }
   .badge-level { background: var(--accent-dim); color: #fff; }
-  .badge-actions { background: var(--bg-elevated); }
+  .badge-actions { background: var(--bg-elevated); min-width: 5.5em; text-align: center; font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; }
   .badge-state-NOT_FINISHED { background: var(--bg-elevated); }
   .badge-state-WIN { background: #166534; color: var(--green); }
   .badge-state-GAME_OVER { background: #7f1d1d; color: var(--red); }
+  .badge-tokens { background: var(--bg-elevated); font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 10px; min-width: 6.5em; text-align: right; }
 
   #grid-canvas {
     border: 1px solid var(--border);
@@ -358,7 +359,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
   }
 
   #timeline-label {
@@ -440,20 +442,44 @@
     width: 20px;
     text-align: center;
     transition: color .15s;
+    position: relative;
   }
   #replay-toggle:hover { color: var(--text); }
   #replay-toggle.open { color: var(--accent); }
 
   #replay-panel {
     display: none;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    gap: 10px;
+    flex-direction: column;
     font-size: 11px;
     font-family: var(--font-mono);
     color: var(--text-muted);
+    box-shadow: 0 -4px 24px rgba(0,0,0,.4);
+    z-index: 200;
+    min-width: 280px;
   }
   #replay-panel.open { display: flex; }
+
+  .replay-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .replay-row label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-muted);
+    min-width: 42px;
+    flex-shrink: 0;
+  }
 
   #replay-panel input[type="number"] {
     width: 52px;
@@ -468,8 +494,14 @@
   }
   #replay-panel input[type="number"]:focus { outline: 1px solid var(--accent); }
 
+  #replay-panel input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 4px;
+  }
+
   .replay-btn {
-    background: var(--bg-elevated);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
@@ -490,21 +522,41 @@
     flex-shrink: 0;
   }
 
-  #replay-speed {
-    width: 60px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text);
+  #replay-delay-value {
     font-family: var(--font-mono);
     font-size: 11px;
-    padding: 2px 4px;
+    min-width: 40px;
+    text-align: right;
+    color: var(--text);
   }
-  #replay-speed:focus { outline: 1px solid var(--accent); }
 
-  /* ── Connection status ─────────────────────────────────── */
+  /* ── Grid footer (tokens + connection) ───────────────── */
+  #grid-footer {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  #grid-footer-toggle {
+    cursor: pointer;
+    user-select: none;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    transition: opacity .15s;
+  }
+  #grid-footer-toggle:hover { opacity: 1; }
+  #grid-footer-content {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+  }
+  #grid-footer-content.open { display: flex; }
+
   #status {
-    margin-left: auto;
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 4px;
@@ -535,7 +587,6 @@
       <span class="badge badge-level" id="hud-level">Level ?/?</span>
       <span class="badge badge-actions" id="hud-actions">Action #0</span>
       <span class="badge badge-state-NOT_FINISHED" id="hud-state">NOT_FINISHED</span>
-      <span id="status" class="connecting">Connecting...</span>
     </header>
     <canvas id="grid-canvas" width="512" height="512"></canvas>
     <div id="action-buttons">
@@ -554,6 +605,14 @@
       </div>
       <button class="action-btn pill unavailable" data-action="RESET" title="Reset Level">RESET</button>
     </div>
+    <div id="grid-footer">
+      <span id="grid-footer-toggle" title="Toggle stats">&#9662; stats</span>
+      <div id="grid-footer-content">
+        <span class="badge badge-tokens" id="hud-tokens" style="display:none" title="Total token usage">0 tok</span>
+        <span class="badge badge-tokens" id="hud-tps" style="display:none" title="Tokens per second">0 tok/s</span>
+        <span id="status" class="connecting">Connecting...</span>
+      </div>
+    </div>
   </div>
 
   <div id="agent-panel">
@@ -567,24 +626,26 @@
     <span id="timeline-label">Timeline</span>
     <span id="replay-toggle" title="Replay controls">&#9654;</span>
     <div id="replay-panel">
-      <input type="number" id="replay-from" value="0" min="0" title="Start action">
-      <span>&ndash;</span>
-      <input type="number" id="replay-to" value="0" min="0" title="End action">
-      <div class="replay-sep"></div>
-      <button class="replay-btn" id="replay-step-back" title="Step back">&larr;</button>
-      <button class="replay-btn" id="replay-play" title="Play / Pause">&#9654;</button>
-      <button class="replay-btn" id="replay-step-fwd" title="Step forward">&rarr;</button>
-      <div class="replay-sep"></div>
-      <label>Delay</label>
-      <select id="replay-speed">
-        <option value="0">0ms</option>
-        <option value="50">50ms</option>
-        <option value="150" selected>150ms</option>
-        <option value="300">300ms</option>
-        <option value="500">500ms</option>
-        <option value="1000">1s</option>
-        <option value="2000">2s</option>
-      </select>
+      <div class="replay-row">
+        <label>Range</label>
+        <input type="number" id="replay-from" value="0" min="0" title="Start action">
+        <span>&ndash;</span>
+        <input type="number" id="replay-to" value="0" min="0" title="End action">
+        <div class="replay-sep"></div>
+        <button class="replay-btn" id="replay-step-back" title="Step back (Left arrow)">&larr;</button>
+        <button class="replay-btn" id="replay-play" title="Play / Pause (Space)">&#9654;</button>
+        <button class="replay-btn" id="replay-step-fwd" title="Step forward (Right arrow)">&rarr;</button>
+      </div>
+      <div class="replay-row">
+        <label>Delay</label>
+        <input type="range" id="replay-delay-slider" min="0" max="3000" step="10" value="150">
+        <span id="replay-delay-value">150ms</span>
+      </div>
+      <div class="replay-row">
+        <label></label>
+        <input type="checkbox" id="replay-dynamic-speed">
+        <span style="cursor:default" title="Automatically adjusts delay: levels with more actions play faster, levels with fewer actions play slower">Auto-pace by level density</span>
+      </div>
     </div>
     <div id="timeline-track"></div>
   </div>
@@ -625,11 +686,22 @@ const hudGameId = document.getElementById("hud-game-id");
 const hudLevel = document.getElementById("hud-level");
 const hudActions = document.getElementById("hud-actions");
 const hudState = document.getElementById("hud-state");
+const hudTokens = document.getElementById("hud-tokens");
+const hudTps = document.getElementById("hud-tps");
+let _firstUsageTs = 0;
 const tabsContainer = document.getElementById("agent-tabs");
 const logsContainer = document.getElementById("agent-logs-container");
 const agentEmpty = document.getElementById("agent-empty");
 const timelineTrack = document.getElementById("timeline-track");
 const statusEl = document.getElementById("status");
+
+{ const tog = document.getElementById("grid-footer-toggle");
+  const panel = document.getElementById("grid-footer-content");
+  tog.addEventListener("click", () => {
+    const open = panel.classList.toggle("open");
+    tog.innerHTML = open ? "&#9652; stats" : "&#9662; stats";
+  });
+}
 
 // Action buttons keyed by action name
 const actionBtns = {};
@@ -1119,6 +1191,35 @@ function handleEvent(evt) {
       updateReplayRange();
       break;
     }
+
+    case "usage_summary": {
+      const tok = evt.total_tokens;
+      const label = tok >= 1_000_000 ? (tok / 1_000_000).toFixed(1) + "M"
+                  : tok >= 1_000     ? (tok / 1_000).toFixed(1) + "K"
+                  : String(tok);
+      hudTokens.textContent = label + " tok";
+      hudTokens.title =
+        `Input: ${(evt.input_tokens ?? 0).toLocaleString()}\n` +
+        `Output: ${(evt.output_tokens ?? 0).toLocaleString()}\n` +
+        `Cached: ${(evt.cached_tokens ?? 0).toLocaleString()}\n` +
+        `Reasoning: ${(evt.reasoning_tokens ?? 0).toLocaleString()}\n` +
+        `Total: ${tok.toLocaleString()}`;
+      hudTokens.style.display = "";
+
+      const now = Date.now() / 1000;
+      if (!_firstUsageTs) _firstUsageTs = now;
+      const elapsed = now - _firstUsageTs;
+      if (elapsed > 0.5) {
+        const outTok = evt.output_tokens ?? 0;
+        const tps = outTok / elapsed;
+        const tpsLabel = tps >= 1_000 ? (tps / 1_000).toFixed(1) + "K"
+                       : tps.toFixed(0);
+        hudTps.textContent = tpsLabel + " tok/s";
+        hudTps.title = `Output tokens / elapsed time\n${outTok.toLocaleString()} output tok / ${elapsed.toFixed(0)}s`;
+        hudTps.style.display = "";
+      }
+      break;
+    }
   }
 }
 
@@ -1133,11 +1234,48 @@ const replayTo = document.getElementById("replay-to");
 const replayPlay = document.getElementById("replay-play");
 const replayStepBack = document.getElementById("replay-step-back");
 const replayStepFwd = document.getElementById("replay-step-fwd");
-const replaySpeed = document.getElementById("replay-speed");
+const replayDelaySlider = document.getElementById("replay-delay-slider");
+const replayDelayValue = document.getElementById("replay-delay-value");
+const replayDynamicSpeed = document.getElementById("replay-dynamic-speed");
 
 let replayTimerId = null;
 let replayPlaying = false;
 let replayToManuallySet = false;
+
+function formatDelay(ms) {
+  return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
+}
+
+replayDelaySlider.addEventListener("input", () => {
+  replayDelayValue.textContent = formatDelay(parseInt(replayDelaySlider.value));
+});
+
+function buildLevelRanges() {
+  const ranges = [];
+  if (!snapshots.length) return ranges;
+  let start = 0, lvl = snapshots[0].level;
+  for (let i = 1; i < snapshots.length; i++) {
+    if (snapshots[i].level !== lvl) {
+      ranges.push({ level: lvl, from: start, to: i - 1, count: i - start });
+      start = i;
+      lvl = snapshots[i].level;
+    }
+  }
+  ranges.push({ level: lvl, from: start, to: snapshots.length - 1, count: snapshots.length - start });
+  return ranges;
+}
+
+function getDynamicDelay(idx) {
+  const ranges = buildLevelRanges();
+  const range = ranges.find(r => idx >= r.from && idx <= r.to);
+  if (!range) return parseInt(replayDelaySlider.value);
+  const minDelay = 0, maxDelay = 1000;
+  const counts = ranges.map(r => r.count);
+  const lo = Math.min(...counts), hi = Math.max(...counts);
+  if (hi === lo) return 200;
+  const t = (range.count - lo) / (hi - lo);
+  return Math.round(maxDelay - t * (maxDelay - minDelay));
+}
 
 replayToggle.addEventListener("click", () => {
   const open = replayPanel.classList.toggle("open");
@@ -1174,6 +1312,11 @@ function replayStep(dir) {
   }
 }
 
+function getReplayDelay(idx) {
+  if (replayDynamicSpeed.checked) return getDynamicDelay(idx);
+  return parseInt(replayDelaySlider.value) || 0;
+}
+
 function replayTick() {
   const endVal = parseInt(replayTo.value);
   const endIdx = isNaN(endVal) ? snapshots.length - 1 : endVal;
@@ -1183,8 +1326,7 @@ function replayTick() {
     return;
   }
   selectSnapshot(next);
-  const delay = parseInt(replaySpeed.value) || 0;
-  replayTimerId = setTimeout(replayTick, delay);
+  replayTimerId = setTimeout(replayTick, getReplayDelay(next));
 }
 
 function replayStart() {
@@ -1198,8 +1340,7 @@ function replayStart() {
   if (currentSnapshotIdx < fromIdx || currentSnapshotIdx >= toIdx) {
     selectSnapshot(fromIdx);
   }
-  const delay = parseInt(replaySpeed.value) || 0;
-  replayTimerId = setTimeout(replayTick, delay);
+  replayTimerId = setTimeout(replayTick, getReplayDelay(currentSnapshotIdx));
 }
 
 replayPlay.addEventListener("click", () => {

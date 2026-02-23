@@ -14,6 +14,7 @@ from .events import (
     AgentSpawnEvent,
 )
 from .server import EventServer
+from .tracker import UsageTracker
 
 
 def _log_id_int(lid: LogId) -> int:
@@ -31,10 +32,11 @@ class WsLogger(AgentLogger):
     local_id: LogId | None
     parent_local_id: LogId | None
 
-    def __init__(self, server: EventServer) -> None:
+    def __init__(self, server: EventServer | None = None, tracker: UsageTracker | None = None) -> None:
         self.local_id = None
         self.parent_local_id = None
         self._server = server
+        self._tracker = tracker
 
     @override
     def should_stream(self) -> bool:
@@ -44,14 +46,15 @@ class WsLogger(AgentLogger):
     def on_spawn(self) -> None:
         if self.local_id is None:
             self.local_id = DefaultLogId()
-        self._server.push(
-            AgentSpawnEvent(
-                agent_id=_log_id_int(self.local_id),
-                parent_id=_log_id_int(self.parent_local_id)
-                if self.parent_local_id is not None
-                else None,
+        if self._server is not None:
+            self._server.push(
+                AgentSpawnEvent(
+                    agent_id=_log_id_int(self.local_id),
+                    parent_id=_log_id_int(self.parent_local_id)
+                    if self.parent_local_id is not None
+                    else None,
+                )
             )
-        )
 
     @override
     def on_call_enter(
@@ -59,34 +62,43 @@ class WsLogger(AgentLogger):
     ) -> None:
         self.parent_local_id = parent_local_id
         assert self.local_id is not None
-        self._server.push(
-            AgentCallEnterEvent(
-                agent_id=_log_id_int(self.local_id),
-                parent_id=_log_id_int(parent_local_id)
-                if parent_local_id is not None
-                else None,
-                prompt=user_prompt,
+        if self._server is not None:
+            self._server.push(
+                AgentCallEnterEvent(
+                    agent_id=_log_id_int(self.local_id),
+                    parent_id=_log_id_int(parent_local_id)
+                    if parent_local_id is not None
+                    else None,
+                    prompt=user_prompt,
+                )
             )
-        )
 
     @override
     def on_call_exit(self, result: object) -> None:
         assert self.local_id is not None
-        self._server.push(
-            AgentCallExitEvent(
-                agent_id=_log_id_int(self.local_id),
-                result=str(result),
+        if self._server is not None:
+            self._server.push(
+                AgentCallExitEvent(
+                    agent_id=_log_id_int(self.local_id),
+                    result=str(result),
+                )
             )
-        )
 
     @override
     async def on_chunk(self, chunk: Chunk) -> None:
         assert self.local_id is not None
-        self._server.push(
-            AgentChunkEvent(
-                agent_id=_log_id_int(self.local_id),
-                role=chunk.role.role,
-                content=chunk.content,
-                chunk_type=chunk.type,
+        aid = _log_id_int(self.local_id)
+        if self._server is not None:
+            self._server.push(
+                AgentChunkEvent(
+                    agent_id=aid,
+                    role=chunk.role.role,
+                    content=chunk.content,
+                    chunk_type=chunk.type,
+                )
             )
-        )
+        if self._tracker is not None:
+            if chunk.type == "usage":
+                self._tracker.record_usage(aid, chunk.content)
+            else:
+                self._tracker.append_reasoning(aid, chunk.type, chunk.content)

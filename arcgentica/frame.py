@@ -334,11 +334,11 @@ class Frame:
         """
         Count of each color value present in the grid.
         """
-        counts: dict[int, int] = {}
+        bins = [0] * 16
         for row in self.grid:
             for val in row:
-                counts[val] = counts.get(val, 0) + 1
-        return counts
+                bins[val] += 1
+        return {c: n for c, n in enumerate(bins) if n}
 
     def bounding_box(self, *colors: int) -> tuple[int, int, int, int] | None:
         """

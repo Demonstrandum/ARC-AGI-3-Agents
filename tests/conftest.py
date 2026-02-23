@@ -2,7 +2,7 @@ import os
 import shutil
 
 import pytest
-from agents.structs import FrameData, GameState
+from arcengine import FrameData, GameState
 
 
 def get_test_recordings_dir():

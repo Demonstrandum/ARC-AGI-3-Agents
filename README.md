@@ -1,5 +1,41 @@
 # ARC-AGI-3-Agents
 
+## Agentica
+
+### Clone and run `agentica-server`
+
+(see detail on [symbolica-ai/agentica-server](https://github.com/symbolica-ai/agentica-server))
+
+```bash
+uv run src/application/main.py --disable-otel \
+  --inference-token=$ANTHROPIC_API_KEY \
+  --inference-endpoint https://api.anthropic.com/v1/messages \
+  --sandbox-mode='no_sandbox' \
+  --max-concurrent-invocations 1200 \
+  --port 2345
+```
+
+### Play the games!
+
+Run the Agentica agent against a puzzle! (also see [Quickstart](#quickstart))
+
+```bash
+export S_M_BASE_URL=http://localhost:2345
+# pick a game:
+VISUALIZE=1 uv run main.py --agent=agentica --game=ft09
+VISUALIZE=1 uv run main.py --agent=agentica --game=ls20
+VISUALIZE=1 uv run main.py --agent=agentica --game=vc33
+```
+
+after having started the front-end visualizer:
+
+```bash
+cd agentica_frontend/
+python -m http.server
+```
+
+(if running without front-end, you may drop the `VISUALIZE=1` env var)
+
 ## Quickstart
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if not aready installed.
@@ -7,8 +43,9 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if not are
 1. Clone the ARC-AGI-3-Agents repo and enter the directory.
 
 ```bash
-git clone https://github.com/arcprize/ARC-AGI-3-Agents.git
+git clone https://github.com/symbolica-ai/ARC-AGI-3-Agents.git
 cd ARC-AGI-3-Agents
+git switch samtoria/arc-3-rlm
 ```
 
 2. Copy .env.example to .env
@@ -36,7 +73,7 @@ For more information, see the [documentation](https://three.arcprize.org/docs#qu
 **Note: This will be a breaking change is you use the fields outline below**
 
 ### Added
-- `FrameData` had two field names changes. 
+- `FrameData` had two field names changes.
   - `score` changed to `levels_completed`
   - `win_score` changed to `win_levels`
 - Updated to use the new [ARC-AGI](https://github.com/arcprize/ARC-AGI) tool

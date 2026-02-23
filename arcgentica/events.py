@@ -17,6 +17,7 @@ class EventType(IntEnum):
     AGENT_CHUNK = 2
     AGENT_CALL_EXIT = 3
     GAME_ACTION = 4
+    USAGE_SUMMARY = 5
 
 
 _EVENT_TYPE_NAMES: tuple[str, ...] = (
@@ -25,6 +26,7 @@ _EVENT_TYPE_NAMES: tuple[str, ...] = (
     "agent_chunk",
     "agent_call_exit",
     "game_action",
+    "usage_summary",
 )
 
 
@@ -144,10 +146,35 @@ class GameActionEvent:
         return json.dumps(self.to_dict())
 
 
+@dataclass(slots=True)
+class UsageSummaryEvent:
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    reasoning_tokens: int
+    total_tokens: int
+    ts: float = field(default_factory=_now)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "type": _EVENT_TYPE_NAMES[EventType.USAGE_SUMMARY],
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
+            "total_tokens": self.total_tokens,
+            "ts": self.ts,
+        }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
+
+
 type Event = (
     AgentSpawnEvent
     | AgentCallEnterEvent
     | AgentChunkEvent
     | AgentCallExitEvent
     | GameActionEvent
+    | UsageSummaryEvent
 )

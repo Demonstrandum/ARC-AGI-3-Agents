@@ -93,13 +93,16 @@ class EventServer:
 
     async def stop(self) -> None:
         """
-        Gracefully shut down the server.
+        Gracefully shut down the server (requires a running event loop).
         """
         if self._server is not None:
             print(f"{_TAG} Shutting down server ...")
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+        self._close_log()
+
+    def _close_log(self) -> None:
         if self._log_file is not None:
             self._log_file.close()
             print(f"{_TAG} Session log saved to {_UNDERLINE}{self._log_path}{_RESET}")

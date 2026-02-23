@@ -20,7 +20,6 @@ tests/recordings/not-a-recording.txt
 # Long-term memory
 memory.db
 
-environment_files/
 
 # Agent logs
 visualizer_logs/
