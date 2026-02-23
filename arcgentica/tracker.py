@@ -25,7 +25,7 @@ class TokenUsage:
         return self.input_tokens + self.output_tokens
 
 
-_REASONING_CHUNK_TYPES = frozenset({"output_text", "reasoning", "code"})
+_IGNORED_CHUNK_TYPES = frozenset({"usage"})
 
 # Leave ~1 KB headroom inside the 16 KB API limit for the JSON envelope.
 _MAX_REASONING_BYTES = 15_000
@@ -42,7 +42,6 @@ class UsageTracker:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._reasoning: dict[int, list[str]] = defaultdict(list)
-        self._last_code_agent: int | None = None
         self._usage: dict[int, TokenUsage] = defaultdict(TokenUsage)
 
     # -- writing (called from WsLogger.on_chunk) ---------------------------
@@ -50,12 +49,10 @@ class UsageTracker:
     def append_reasoning(self, agent_id: int, chunk_type: str | None, text: str) -> None:
         if not text:
             return
-        if chunk_type is not None and chunk_type not in _REASONING_CHUNK_TYPES:
+        if chunk_type in _IGNORED_CHUNK_TYPES:
             return
         with self._lock:
             self._reasoning[agent_id].append(text)
-            if chunk_type == "code":
-                self._last_code_agent = agent_id
 
     def record_usage(self, agent_id: int, content: str) -> None:
         try:
@@ -77,23 +74,26 @@ class UsageTracker:
 
     def drain_reasoning(self) -> dict[str, object] | None:
         """
-        Drain the active executor's reasoning buffer and return a dict
-        suitable for the API reasoning field, or None if empty.
-
-        The "active executor" is the last agent that emitted a code chunk.
+        Drain ALL accumulated reasoning across every agent and return a dict
+        suitable for the API reasoning field, or None if nothing was buffered.
         """
         with self._lock:
-            aid = self._last_code_agent
-            if aid is None or aid not in self._reasoning:
+            if not self._reasoning:
                 return None
-            chunks = self._reasoning.pop(aid)
-        if not chunks:
+            all_buffers = dict(self._reasoning)
+            self._reasoning.clear()
+        parts: list[str] = []
+        for aid in sorted(all_buffers):
+            chunks = all_buffers[aid]
+            if chunks:
+                parts.append(f"[agent {aid}]\n" + "".join(chunks))
+        if not parts:
             return None
-        text = "".join(chunks)
+        text = "\n\n".join(parts)
         encoded = text.encode("utf-8")
         if len(encoded) > _MAX_REASONING_BYTES:
             text = encoded[-_MAX_REASONING_BYTES:].decode("utf-8", errors="ignore")
-        return {"agent_id": aid, "text": text}
+        return {"text": text}
 
     def total_usage(self) -> TokenUsage:
         with self._lock:

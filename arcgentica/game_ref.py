@@ -9,7 +9,7 @@ GAME_REFERENCE = f"""This is a visual game designed for humans. You see it as a 
 coordinate grid of integers 0-15 ({COLOR_LEGEND}), due to the nature and limitations of your interface.
 You use coordinates to identify positions and click, but game mechanics and win
 conditions are about relationships between elements, not positions on the grid.
-Think "element must reach the goal" not "element must reach row 38." If your
+Think "A must reach B" not "A must reach row 38." If your
 hypothesis includes a specific coordinate as part of the goal, it is wrong --
 restate it in terms of what must relate to what.
 Render the grid and read it as a picture.
@@ -63,6 +63,15 @@ Methodology: It is fine to execute a planned sequence of actions when you are
   a post-hoc analysis of what actually happened step by step, find where reality
   diverged from your theory, and figure out WHY before attempting a new approach.
 
+Forming good hypotheses: When something interesting happens, don't just note the
+  event -- note what else was true at that moment. What were other elements doing
+  relative to each other? The relationship between elements is often the actual rule.
+  Never trust a hypothesis based on a single observation. Reproduce the effect from
+  a different starting state to separate the actual rule from coincidences of that
+  particular configuration.
+  When stuck, compare: what was different about the state when the effect triggered
+  vs when it didn't? Look for which relationship was present vs absent.
+
 Look at the grid. Statistics like color_counts() and bounding_box() are useful
   summaries, but they are lossy -- they throw away spatial structure. Regularly
   render the grid (or a cropped region of interest) and actually read it. Many
@@ -81,6 +90,8 @@ Knowing when to stop: If you have tried 2-3 variations of an approach and none
   produce the expected result, do NOT keep trying. Return to your caller with a
   clear report of what you tried, what happened, and what you think went wrong.
   Fresh eyes (a new agent) will do better than grinding on a stale theory.
+  If you still have untested hypotheses you can try from the current state,
+  keep going -- it is not always necessary to give up and reset just because one idea didn't pan out.
 
 history(n=50, wins_only=False) -- list of (action_name, Frame) pairs for the last
   n actions, oldest first. Covers ALL agents, not just the current one. Use this
@@ -134,7 +145,10 @@ Frame helpers:
     Changed cells show new value; unchanged show ".".
   frame.find(*colors) -- [(x, y, value), ...] for matching pixels
   frame.bounding_box(*colors) -- (x1, y1, x2, y2) of matching pixels
-  frame.color_counts() -- dict of color → count"""
+  frame.color_counts() -- dict of color → count
+
+Remember: don't give up and reset if you can still test a hypothesis from the
+  current state. Your position might be closer to a solution than a fresh start."""
 
 SYSTEM_PROMPT = f"""You are the top-level ORCHESTRATOR for an ARC-AGI-3 game.
 
@@ -200,19 +214,24 @@ agent) or refined instructions (same agent) will work better.
 1. **Explore** -- Spawn an explorer. Give it `submit_action` and the initial frame.
    Tell it which actions are available (from `initial_frame.available_actions`).
    Ask it to try them, see what happens, diff frames, and report back a structured summary including:
-   - The scene layout: what objects/regions exist, where they are, their colors
-   - What each color appears to represent (walls, goals, cursors, background, etc.)
-   - What each action does (movement direction, interaction effects)
-   - Any UI elements (score bars, indicators, level markers)
+   - The scene layout: what distinct objects/regions exist, their colors, and spatial relationships
+   - What role each color appears to play
+   - What each action does and how it affects the scene
+   - Anything that looks interactive or stateful
 
 2. **Hypothesize** -- Spawn a theorist (no `submit_action`). Feed it the explorer's
    summary. Ask it to form hypotheses about the game rules and the win condition.
    Reject any hypothesis stated in absolute coordinates -- mechanics are always
-   relational (element reaches goal, shape completed, path connected, etc.).
+   relational, never about reaching a specific coordinate.
+   Challenge the theorist: does the hypothesis depend on specific coordinates,
+   does it rely on an incredibly specific and seemingly arbitrary sequence of actions, or
+   would it still hold if everything were shifted to a different part of the grid?
 
 3. **Test** -- Either call the explorer again or spawn a tester. Give it the hypothesis
    and `submit_action` with a small action budget. Ask it to run targeted experiments
-   and report whether the hypothesis held.
+   and report whether the hypothesis held. A good test reproduces the effect from a
+   different starting configuration -- if the hypothesis only works from one specific
+   state, it may be a coordinate coincidence rather than a real rule.
 
 4. **Iterate** -- Based on test results, decide:
    a) Feed results back to the SAME theorist to refine (preserves reasoning context).
