@@ -1269,12 +1269,9 @@ function getDynamicDelay(idx) {
   const ranges = buildLevelRanges();
   const range = ranges.find(r => idx >= r.from && idx <= r.to);
   if (!range) return parseInt(replayDelaySlider.value);
-  const minDelay = 0, maxDelay = 1000;
-  const counts = ranges.map(r => r.count);
-  const lo = Math.min(...counts), hi = Math.max(...counts);
-  if (hi === lo) return 200;
-  const t = (range.count - lo) / (hi - lo);
-  return Math.round(maxDelay - t * (maxDelay - minDelay));
+  const TARGET_LEVEL_MS = 12000;
+  const MIN_DELAY = 15, MAX_DELAY = 400;
+  return Math.round(Math.max(MIN_DELAY, Math.min(MAX_DELAY, TARGET_LEVEL_MS / range.count)));
 }
 
 replayToggle.addEventListener("click", () => {
