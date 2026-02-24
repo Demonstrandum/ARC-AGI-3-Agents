@@ -395,6 +395,7 @@
 
   .timeline-tick:hover { opacity: 1; }
   .timeline-tick.active { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+  .timeline-tick.reset { opacity: .25; width: 3px; min-width: 3px; }
   .timeline-tick.state-NOT_FINISHED { background: var(--text-muted); }
   .timeline-tick.state-WIN { background: var(--green); }
   .timeline-tick.state-GAME_OVER { background: var(--red); }
@@ -799,7 +800,7 @@ function updateClickInfo(x, y) {
 function updateHUD(snap) {
   const total = snap.win_levels || "?";
   hudLevel.textContent = `Level ${snap.level}/${total}`;
-  hudActions.textContent = `Action #${snap.count}`;
+  hudActions.textContent = `Action #${snap.count}${snap.action === "RESET" ? " (RESET)" : ""}`;
   hudState.textContent = snap.state;
   hudState.className = "badge badge-state-" + snap.state;
 }
@@ -815,15 +816,19 @@ let levelStartIdx = 0;
 
 const timelineLabel = document.getElementById("timeline-label");
 
+function countNonReset() {
+  return snapshots.filter(s => s.action !== "RESET").length;
+}
+
 function updateTimelineLabel() {
-  const n = snapshots.length;
+  const n = countNonReset();
   timelineLabel.textContent = n ? `Timeline · ${n} actions` : "Timeline";
 }
 
 function addTimelineTick(snap, idx) {
   // If level changed, insert a level-break marker
   if (timelineLastLevel >= 0 && snap.level > timelineLastLevel) {
-    const actionsInLevel = idx - levelStartIdx;
+    const actionsInLevel = snapshots.slice(levelStartIdx, idx).filter(s => s.action !== "RESET").length;
     const marker = document.createElement("div");
     marker.className = "timeline-level-break";
     marker.textContent = `${timelineLastLevel}(${actionsInLevel})`;
@@ -837,7 +842,7 @@ function addTimelineTick(snap, idx) {
   }
 
   const tick = document.createElement("div");
-  tick.className = "timeline-tick state-" + snap.state;
+  tick.className = "timeline-tick state-" + snap.state + (snap.action === "RESET" ? " reset" : "");
   tick.title = `#${snap.count} ${snap.action} (${snap.state})`;
   tick.dataset.idx = idx;
   timelineTrack.appendChild(tick);
@@ -1176,7 +1181,9 @@ function handleEvent(evt) {
           finalizeBlock(agent);
           const marker = document.createElement("div");
           marker.className = "action-marker";
-          marker.textContent = `\u25c6 Action #${snap.count} \u2014 ${snap.action}`;
+          marker.textContent = snap.action === "RESET"
+            ? `\u25c6 RESET`
+            : `\u25c6 Action #${snap.count} \u2014 ${snap.action}`;
           marker.dataset.snapIdx = idx;
           marker.addEventListener("click", () => selectSnapshot(idx));
           agent.logEl.appendChild(marker);

@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -41,19 +42,36 @@ class Memories:
     """
 
     stack: list[Memory]
-    _memory_agent: Agent
+    _memory_agent: asyncio.Task[Agent]
+    _last_seen: int
 
     def __init__(self) -> None:
         self.stack = []
-        self._memory_agent = spawn(
-            model=SUBAGENT_MODEL,
-            premise="You are a memory agent. You are responsible for storing and retrieving crucial insights, observations, and knowledge.",
-            scope={"memories": self, "MemoryQueryError": MemoryQueryError},
+        self._last_seen = 0
+        self._memory_agent = asyncio.ensure_future(
+            spawn(
+                model=SUBAGENT_MODEL,
+                listener=None,
+                premise=(
+                    "You retrieve information from a shared `memories` object. "
+                    "You can call any of its methods: memories.stack, memories.get(i), "
+                    "memories.add(summary, details), memories.evict(i), memories.summaries(). "
+                    "Do not make up information -- only return what the memories support. "
+                    "Raise MemoryQueryError if: no memories address the question, the stored "
+                    "information is too vague to give a confident answer, or the requested "
+                    "return format is not appropriate for the query."
+                ),
+                scope={"memories": self, "MemoryQueryError": MemoryQueryError},
+            )
         )
 
     def add(self, summary: str, details: str) -> None:
         """Append an insight."""
         self.stack.append(Memory(summary, details))
+
+    def summaries(self) -> list[str]:
+        """Short summary of every stored memory, for a quick glance at what's already known."""
+        return [f"[{i}] {m.summary}" for i, m in enumerate(self.stack)]
 
     def get(self, i: int) -> Memory:
         """Retrieve an insight by index. Negative indices are supported."""
@@ -63,7 +81,7 @@ class Memories:
         """Remove an insight by index. If no index is provided, pop the last insight."""
         self.stack.pop(i)
 
-    def query[T](self, return_type: type[T], query: str) -> T:
+    async def query[T](self, return_type: type[T], query: str) -> T:
         """
         Natural language query information from the memories.
 
@@ -75,13 +93,20 @@ class Memories:
             memories.query(Memory, "What happens when I take action X?")
             memories.query(list[Memory], "Give me the last 3 memories pertaining to level X.")
         """
-        return self._memory_agent.call(
+        agent = await self._memory_agent
+        new_count = len(self.stack) - self._last_seen
+        self._last_seen = len(self.stack)
+        if new_count > 0:
+            preamble = f"There are {new_count} new memories since your last call.\n\n"
+        else:
+            preamble = ""
+        return await agent.call(
             return_type,
-            f"Your task is to retrieve information from the memories based on the query.\n"
-            f"You must be diligent and inspect any new memories that may have been added since the last query.\n"
-            f"You may raise an exception if the query is not possible to answer with the given memories, should they be insufficient or too unclear.\n"
-            f"You should not make up information, you must only return in the desired format if the format is appropriate for the query, otherwise raise an exception.\n"
-            f"You have been given the following query: {query}",
+            f"{preamble}Answer the following query. Raise MemoryQueryError if: no "
+            f"memories address the question, the stored information is too vague to "
+            f"give a confident answer, or the requested return format is not appropriate "
+            f"for the query.\n\nQuery: {query}",
+            memories=self,
             stack=self.stack,
         )
 

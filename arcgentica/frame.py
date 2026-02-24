@@ -160,7 +160,9 @@ class Frame:
         "_frozen",
     )
 
-    def __init__(self, data: FrameData, *, prev_levels_completed: int | None = None) -> None:
+    def __init__(
+        self, data: FrameData, *, prev_levels_completed: int | None = None
+    ) -> None:
         object.__setattr__(self, "_frozen", False)
         self._data = data
         raw_grid = data.frame[-1]

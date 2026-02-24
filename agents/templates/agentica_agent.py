@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 import numpy as np
 from agentica import spawn
-from agentica.logging import AgentListener, set_default_agent_listener
+from agentica.logging import AgentListener
 from arcengine import FrameData, GameAction, GameState
 
 from arcgentica import EventServer, WsLogger
@@ -121,12 +121,14 @@ class Agentica(Agent):
         has_moves_since_reset: bool = False
         last_frame: Frame | None = None
         _action_history: deque[tuple[str, Frame]] = deque(maxlen=_MAX_HISTORY)
+        _win_history: list[tuple[str, Frame]] = []
 
         def _push_frame(action: GameAction, raw: FrameData) -> Frame:
             nonlocal last_available, has_moves_since_reset, last_frame
             last_available = raw.available_actions
             self.append_frame(raw)
-            self.action_counter += 1
+            if action is not GameAction.RESET:
+                self.action_counter += 1
             if action is GameAction.RESET:
                 has_moves_since_reset = False
             elif (
@@ -146,6 +148,8 @@ class Agentica(Agent):
             frame = Frame(raw, prev_levels_completed=prev_lc)
             last_frame = frame
             _action_history.append((action.name, frame))
+            if frame.winning_frame is not None:
+                _win_history.append((action.name, frame))
             self._log_action(action, frame)
             if server is not None:
                 cx = action.action_data.x if action.is_complex() else None
@@ -227,7 +231,7 @@ class Agentica(Agent):
             raw = self.take_action(action)
 
             # Session may have gone stale — RESET and retry once
-            if raw is None and action is not GameAction.RESET:
+            if raw is None:
                 logger.warning(
                     f"{self.game_id} - {action.name} failed, "
                     "resetting session and retrying"
@@ -235,13 +239,15 @@ class Agentica(Agent):
                 reset_raw = self.take_action(GameAction.RESET)
                 if reset_raw:
                     self.append_frame(reset_raw)
-                    self.action_counter += 1
-                raw = self.take_action(action)
+                if action is GameAction.RESET:
+                    raw = reset_raw
+                else:
+                    raw = self.take_action(action)
 
             if raw:
                 return _push_frame(action, raw)
 
-            raise ValueError("Action failed — no frame returned.")
+            raise ValueError("Received None frame data from environment")
 
         def history(
             n: int = _MAX_HISTORY, wins_only: bool = False
@@ -261,12 +267,10 @@ class Agentica(Agent):
                     reviewing what the winning state looked like on past levels.
             """
             if wins_only:
-                entries = [
-                    (a, f) for a, f in _action_history if f.winning_frame is not None
-                ]
+                entries = _win_history
             else:
                 entries = list(_action_history)
-            return entries[-n:] if n < len(entries) else entries
+            return entries[-n:] if n < len(entries) else list(entries)
 
         return submit_action, history
 
@@ -286,27 +290,47 @@ class Agentica(Agent):
         if limit is None:
             return inner
 
-        remaining = limit
+        _used = 0
 
         def bounded(
             action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
         ) -> Frame:
-            nonlocal remaining
+            nonlocal _used
             upper = action_name.upper()
             if upper != "NOOP" and upper != "RESET":
-                if remaining <= 0:
+                if _used >= limit:
                     raise ValueError(
                         f"Action budget exhausted: all {limit} actions have been used."
                     )
-                remaining -= 1
+                _used += 1
             return inner(action_name, x, y)
 
+        def remaining() -> int:
+            """How many game actions are left in this budget."""
+            return limit - _used
+
+        def used() -> int:
+            """How many game actions have been used so far."""
+            return _used
+
+        bounded.remaining = remaining  # type: ignore[attr-defined]
+        bounded.used = used  # type: ignore[attr-defined]
+        bounded.limit = limit  # type: ignore[attr-defined]
         bounded.__doc__ = (
             dedent(inner.__doc__ or "")
             + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
+            + "\n\nCheck `submit_action.remaining()` for how many actions are left."
         )
         bounded.__name__ = "submit_action"
         return bounded
+
+    def _make_listener(self):
+        """Build a listener constructor, or None if no server is active."""
+        server = self._server
+        tracker = self._tracker
+        if server is None and tracker is None:
+            return None
+        return lambda: AgentListener(WsLogger(server, tracker=tracker))
 
     async def spawn_agent(self, system_prompt: str | None = None):
         """
@@ -324,6 +348,7 @@ class Agentica(Agent):
             model=SUBAGENT_MODEL,
             premise=system_prompt,
             reasoning_effort=REASONING_EFFORT,
+            listener=self._make_listener(),
             scope={
                 "spawn_agent": self.spawn_agent,
                 "numpy": np,
@@ -345,10 +370,6 @@ class Agentica(Agent):
             server = EventServer(game_id=self.game_id)
             await server.start()
             self._server = server
-        set_default_agent_listener(
-            lambda: AgentListener(WsLogger(server, tracker=tracker))
-        )
-
         submit_action, history = self._make_submit_action(server=server)
 
         # TODO: future idea --- also allow restricting to a subset of actions, e.g. only ACTION1-ACTION4.
@@ -375,7 +396,6 @@ class Agentica(Agent):
         initial_raw = self.take_action(GameAction.RESET)
         if initial_raw:
             self.append_frame(initial_raw)
-            self.action_counter += 1
 
         initial_frame = submit_action("RESET")
 
@@ -383,6 +403,7 @@ class Agentica(Agent):
             model=MAIN_AGENT_MODEL,
             premise=SYSTEM_PROMPT,
             reasoning_effort=REASONING_EFFORT,
+            listener=self._make_listener(),
             scope={
                 "spawn_agent": self.spawn_agent,
                 "numpy": np,
