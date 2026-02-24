@@ -6,7 +6,6 @@ from agentica import Agent, spawn
 from agentica.logging.agent_listener import AgentListener
 from agentica.logging.loggers.file_logger import FileLogger
 
-from arcgentica.models import SUBAGENT_MODEL
 
 
 @dataclass(slots=True, frozen=True)
@@ -47,12 +46,12 @@ class Memories:
     _memory_agent: asyncio.Task[Agent]
     _last_seen: int
 
-    def __init__(self) -> None:
+    def __init__(self, model: str) -> None:
         self.stack = []
         self._last_seen = 0
         self._memory_agent = asyncio.ensure_future(
             spawn(
-                model=SUBAGENT_MODEL,
+                model=model,
                 listener=lambda: AgentListener(FileLogger("logs/", "memory-agent-")),
                 premise=(
                     "You retrieve information from a shared `memories` object. "

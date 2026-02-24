@@ -17,13 +17,13 @@ from typing import TextIO
 import websockets
 import websockets.asyncio.server
 
-from .colors import PALETTE
+from ..colors import PALETTE
 from .events import Event, GameActionEvent
-from .frame import Frame
+from ..scope.frame import Frame
 
 logger = logging.getLogger(__name__)
 
-_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "arcgentica_frontend"
+_FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
 # ANSI formatting helpers
 _CYAN = "\033[96m"

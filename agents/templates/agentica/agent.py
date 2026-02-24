@@ -9,20 +9,20 @@ from textwrap import dedent
 from typing import Any, Literal
 
 import numpy as np
-from agentica import spawn
-from agentica.logging import AgentListener
 from arcengine import FrameData, GameAction, GameState
 
-from arcgentica import EventServer, WsLogger
-from arcgentica.events import UsageSummaryEvent
-from arcgentica.frame import Frame
-from arcgentica.game_ref import GAME_REFERENCE, SYSTEM_PROMPT
-from arcgentica.memories import Memories, Memory
-from arcgentica.models import MAIN_AGENT_MODEL, REASONING_EFFORT, SUBAGENT_MODEL
-from arcgentica.tracker import UsageTracker
+from agentica import spawn
+from agentica.logging import AgentListener
+from agents.templates.agentica.model import OPUS_4_6
 
-from ..agent import Agent
-from ..tracing import trace_agent_session
+from agents.agent import Agent
+from agents.tracing import trace_agent_session
+from .logging.events import UsageSummaryEvent
+from .logging.logger import EventServer, WsLogger
+from .logging.tracker import UsageTracker
+from .prompts import GAME_REFERENCE, system_prompt
+from .scope.frame import Frame
+from .scope.memories import Memories, Memory
 
 logger = logging.getLogger()
 
@@ -49,6 +49,7 @@ class Agentica(Agent):
 
     def __init__(self, *args: Any, visualize: bool = False, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.model = OPUS_4_6
         self.visualize = visualize or os.environ.get("VISUALIZE", "") == "1"
         self._server: EventServer | None = None
         self._tracker: UsageTracker | None = None
@@ -348,9 +349,9 @@ class Agentica(Agent):
         performance degrades as context grows, so there is a trade-off you have to consider.
         """
         return await spawn(
-            model=SUBAGENT_MODEL,
+            model=self.model.subagent_model,
             premise=system_prompt,
-            reasoning_effort=REASONING_EFFORT,
+            reasoning_effort=self.model.reasoning_effort,
             listener=self._make_listener(),
             scope={
                 "spawn_agent": self.spawn_agent,
@@ -403,9 +404,9 @@ class Agentica(Agent):
         initial_frame = submit_action("RESET")
 
         orchestrator = await spawn(
-            model=MAIN_AGENT_MODEL,
-            premise=SYSTEM_PROMPT,
-            reasoning_effort=REASONING_EFFORT,
+            model=self.model.main_agent_model,
+            premise=system_prompt(self.model),
+            reasoning_effort=self.model.reasoning_effort,
             listener=self._make_listener(),
             scope={
                 "spawn_agent": self.spawn_agent,
@@ -419,7 +420,7 @@ class Agentica(Agent):
         remaining = self.MAX_ACTIONS - self.action_counter
         actions = ", ".join(initial_frame.available_actions)
 
-        memories = Memories()  # the shared memories database
+        memories = Memories(model=self.model.subagent_model)
 
         return await orchestrator.call(
             None,

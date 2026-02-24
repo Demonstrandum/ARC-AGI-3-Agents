@@ -15,7 +15,7 @@ from pathlib import Path
 import websockets
 import websockets.asyncio.server
 
-_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "arcgentica_frontend"
+_FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
 # ANSI formatting helpers
 _CYAN = "\033[96m"

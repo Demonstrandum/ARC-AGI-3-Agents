@@ -67,7 +67,7 @@ The visualizer is a browser-based frontend that streams agent activity, grid sta
 
 ```bash
 # Start the frontend (in another terminal):
-cd arcgentica_frontend/
+cd agents/templates/agentica/logging/frontend/
 python -m http.server
 
 # Run the agent with VISUALIZE=1:
@@ -76,7 +76,7 @@ VISUALIZE=1 uv run main.py --agent=agentica --game=vc33
 
 Open `http://localhost:8000` in your browser. Drop `VISUALIZE=1` if you don't need the frontend.
 
-See [`arcgentica/README.md`](arcgentica/README.md) for details on logging, replays, and architecture.
+See [`agents/templates/agentica/README.md`](agents/templates/agentica/README.md) for architecture and [`agents/templates/agentica/logging/README.md`](agents/templates/agentica/logging/README.md) for logging, replays, and visualizer details.
 
 ## Tests
 

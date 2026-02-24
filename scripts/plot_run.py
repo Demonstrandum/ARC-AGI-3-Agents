@@ -107,6 +107,49 @@ def build_step_xy(steps: list[tuple[int, int]], tail_x: int, tail_y: int):
     return xs, ys
 
 
+def build_json(recording_paths: list[Path], baseline_override: str | None = None,
+               wins_only: bool = False) -> dict | None:
+    """Build a JSON-serializable dict with all plot data for one game."""
+    runs = [parse_recording(p) for p in recording_paths]
+    runs = [r for r in runs if r["game_id"]]
+    if not runs:
+        return None
+
+    if wins_only:
+        runs = [r for r in runs if r["won"]]
+    runs = [r for r in runs if r["max_level"] > 0]
+    if not runs:
+        return None
+
+    game_id = runs[0]["game_id"]
+    win_levels = max(r["win_levels"] for r in runs)
+
+    baseline: list[int] | None = None
+    if baseline_override:
+        baseline = [int(x.strip()) for x in baseline_override.split(",")]
+    else:
+        baseline = load_baseline_from_metadata(game_id)
+
+    sorted_runs = sorted(runs, key=lambda r: (-r["max_level"], r["total_actions"]))
+
+    return {
+        "game_id": game_id,
+        "title": load_game_title(game_id),
+        "win_levels": win_levels,
+        "baseline": baseline,
+        "runs": [
+            {
+                "guid": r["path"].stem.split(".")[-2],
+                "total_actions": r["total_actions"],
+                "max_level": r["max_level"],
+                "won": r["won"],
+                "steps": r["steps"],
+            }
+            for r in sorted_runs
+        ],
+    }
+
+
 TOP_LABELED = 5
 
 
@@ -247,7 +290,13 @@ def main():
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        if args.output.suffix == ".png":
+        if args.output.suffix == ".json":
+            data = build_json(args.recordings, args.baseline, args.wins_only)
+            if data is None:
+                print("No runs with level progress found.", file=sys.stderr)
+                sys.exit(1)
+            args.output.write_text(json.dumps(data, indent=2))
+        elif args.output.suffix == ".png":
             fig.write_image(str(args.output), width=1200, height=600, scale=2)
         else:
             fig.write_html(str(args.output))

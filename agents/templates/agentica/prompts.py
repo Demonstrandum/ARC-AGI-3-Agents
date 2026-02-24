@@ -3,7 +3,7 @@ Game reference and system prompt strings.
 """
 
 from .colors import COLOR_LEGEND
-from .models import SUBAGENT_MAX_CONTEXT
+from .model import ModelConfig
 
 GAME_REFERENCE = f"""This is a visual game designed for humans. You see it as a 64x64
 coordinate grid of integers 0-15 ({COLOR_LEGEND}), due to the nature and limitations of your interface.
@@ -185,7 +185,9 @@ Remember: do NOT reset to "start clean" or "try a proper approach." If you figur
   out the solution, execute it from where you are now. Your current state is progress,
   not a problem. Resetting wastes every action you already spent."""
 
-SYSTEM_PROMPT = f"""You are the top-level ORCHESTRATOR for an ARC-AGI-3 game.
+
+def system_prompt(model: ModelConfig):
+    return f"""You are the top-level ORCHESTRATOR for an ARC-AGI-3 game.
 
 ## YOUR ONLY JOB
 
@@ -227,18 +229,18 @@ Do NOT dictate specific action sequences -- that's playing the game yourself by
 proxy. Give the subagent the knowledge and the goal, then let it figure out how.
 
 {
-    f'''## Context Window Management
+        f'''## Context Window Management
 
-Each subagent has a context window of {SUBAGENT_MAX_CONTEXT:,} tokens. After each
+Each subagent has a context window of {model.max_context:,} tokens. After each
 `.call()`, check `agent.last_usage().total_tokens` -- this is the total tokens
 (input + output) up to and including that call, i.e. how full the context window is.
-When this approaches {SUBAGENT_MAX_CONTEXT:,}, the agent is nearing saturation and
+When this approaches {model.max_context:,}, the agent is nearing saturation and
 its quality will degrade. Debrief it (extract its knowledge) and spawn a fresh
 replacement before it hits the wall.
 '''
-    if False  # disabled until this is added in the SDK
-    else ""
-}
+        if False  # disabled until this is added in the SDK
+        else ""
+    }
 
 ## Key Orchestration Decisions
 

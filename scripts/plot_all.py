@@ -8,10 +8,11 @@ Usage:
 """
 
 import argparse
+import json
 from collections import defaultdict
 from pathlib import Path
 
-from plot_run import REPO_ROOT, plot_game, load_game_title
+from plot_run import REPO_ROOT, plot_game, build_json, load_game_title
 
 RECORDINGS_DIR = REPO_ROOT / "recordings"
 PLOTS_DIR = REPO_ROOT / "plots"
@@ -94,9 +95,13 @@ def main():
             continue
         html_out = PLOTS_DIR / f"{game_id}.html"
         png_out = PLOTS_DIR / f"{game_id}.png"
+        json_out = PLOTS_DIR / f"{game_id}.json"
         fig.write_html(str(html_out))
         fig.write_image(str(png_out), width=1200, height=600, scale=2)
-        print(f"  Saved to {html_out} + {png_out}")
+        data = build_json(paths, wins_only=args.wins_only)
+        if data:
+            json_out.write_text(json.dumps(data, indent=2))
+        print(f"  Saved to {html_out} + {png_out} + {json_out}")
         index_entries.append((game_id, load_game_title(game_id), len(paths)))
 
     write_index(index_entries)

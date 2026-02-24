@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from .agent import Agent, Playback
 from .recorder import Recorder
 from .swarm import Swarm
+from .templates.agentica import Agentica
 from .templates.langgraph_functional_agent import LangGraphFunc, LangGraphTextOnly
 from .templates.langgraph_random_agent import LangGraphRandom
 from .templates.langgraph_thinking import LangGraphThinking
@@ -12,7 +13,6 @@ from .templates.llm_agents import LLM, FastLLM, GuidedLLM, ReasoningLLM
 from .templates.multimodal import MultiModalLLM
 from .templates.random_agent import Random
 from .templates.reasoning_agent import ReasoningAgent
-from .templates.agentica_agent import Agentica
 from .templates.smolagents import SmolCodingAgent, SmolVisionAgent
 
 load_dotenv()
