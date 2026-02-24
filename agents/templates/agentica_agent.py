@@ -229,25 +229,12 @@ class Agentica(Agent):
                 self._pending_reasoning = reasoning
 
             raw = self.take_action(action)
-
-            # Session may have gone stale — RESET and retry once
             if raw is None:
-                logger.warning(
-                    f"{self.game_id} - {action.name} failed, "
-                    "resetting session and retrying"
+                raise RuntimeError(
+                    f"{action.name} returned no frame data. "
+                    "The server may have rejected the action."
                 )
-                reset_raw = self.take_action(GameAction.RESET)
-                if reset_raw:
-                    self.append_frame(reset_raw)
-                if action is GameAction.RESET:
-                    raw = reset_raw
-                else:
-                    raw = self.take_action(action)
-
-            if raw:
-                return _push_frame(action, raw)
-
-            raise ValueError("Received None frame data from environment")
+            return _push_frame(action, raw)
 
         def history(
             n: int = _MAX_HISTORY, wins_only: bool = False
@@ -283,15 +270,15 @@ class Agentica(Agent):
             limit: the total budget this was created with.
         """
 
+        remaining: int
+        used: int
+        limit: int
+
         def __init__(self, inner, limit: int) -> None:
             self._inner = inner
             self._limit = limit
             self._used = 0
-            self.__doc__ = (
-                dedent(inner.__doc__ or "")
-                + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
-                + "\n\nCheck `submit_action.remaining` for how many actions are left."
-            )
+            self.__class__.__doc__ = dedent(inner.__doc__ or "")
 
         def __call__(
             self, action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
