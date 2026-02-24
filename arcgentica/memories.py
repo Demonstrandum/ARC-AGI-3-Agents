@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from agentica import Agent, spawn
+from agentica.logging.agent_listener import AgentListener
+from agentica.logging.loggers.file_logger import FileLogger
 
 from arcgentica.models import SUBAGENT_MODEL
 
@@ -51,7 +53,7 @@ class Memories:
         self._memory_agent = asyncio.ensure_future(
             spawn(
                 model=SUBAGENT_MODEL,
-                listener=None,
+                listener=lambda: AgentListener(FileLogger("logs/", "memory-agent-")),
                 premise=(
                     "You retrieve information from a shared `memories` object. "
                     "You can call any of its methods: memories.stack, memories.get(i), "
