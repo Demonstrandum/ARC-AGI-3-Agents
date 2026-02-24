@@ -274,12 +274,61 @@ class Agentica(Agent):
 
         return submit_action, history
 
+    class bounded_submit_action:
+        """Callable ``submit_action`` wrapper with an action budget.
+
+        Properties:
+            remaining: how many game actions are left.
+            used: how many game actions have been spent.
+            limit: the total budget this was created with.
+        """
+
+        def __init__(self, inner, limit: int) -> None:
+            self._inner = inner
+            self._limit = limit
+            self._used = 0
+            self.__doc__ = (
+                dedent(inner.__doc__ or "")
+                + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
+                + "\n\nCheck `submit_action.remaining` for how many actions are left."
+            )
+
+        def __call__(
+            self, action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
+        ) -> Frame:
+            upper = action_name.upper()
+            if upper != "NOOP" and upper != "RESET":
+                if self._used >= self._limit:
+                    raise ValueError(
+                        f"Action budget exhausted: all {self._limit} actions have been used."
+                    )
+                self._used += 1
+            return self._inner(action_name, x, y)
+
+        @property
+        def remaining(self) -> int:
+            """How many game actions are left in this budget."""
+            return self._limit - self._used
+
+        @property
+        def used(self) -> int:
+            """How many game actions have been spent so far."""
+            return self._used
+
+        @property
+        def limit(self) -> int:
+            """The total action budget this was created with."""
+            return self._limit
+
+        def __repr__(self) -> str:
+            return f"bounded_submit_action({self.used}/{self.limit} used, {self.remaining} remaining)"
+
     @staticmethod
     def _make_bounded_submit_action(inner, limit: int | None):
         """
         Wrap an existing submit_action, optionally with a hard action budget.
 
-        The returned function delegates to `inner` for all calls. It shares
+        The returned callable delegates to `inner` for all calls. It shares
         inner's closure state (last_frame, has_moves_since_reset, etc.) so
         RESET guards and NOOP work correctly.
 
@@ -289,40 +338,7 @@ class Agentica(Agent):
         """
         if limit is None:
             return inner
-
-        _used = 0
-
-        def bounded(
-            action_name: ActionName | Literal["NOOP"], x: int = 0, y: int = 0
-        ) -> Frame:
-            nonlocal _used
-            upper = action_name.upper()
-            if upper != "NOOP" and upper != "RESET":
-                if _used >= limit:
-                    raise ValueError(
-                        f"Action budget exhausted: all {limit} actions have been used."
-                    )
-                _used += 1
-            return inner(action_name, x, y)
-
-        def remaining() -> int:
-            """How many game actions are left in this budget."""
-            return limit - _used
-
-        def used() -> int:
-            """How many game actions have been used so far."""
-            return _used
-
-        bounded.remaining = remaining  # type: ignore[attr-defined]
-        bounded.used = used  # type: ignore[attr-defined]
-        bounded.limit = limit  # type: ignore[attr-defined]
-        bounded.__doc__ = (
-            dedent(inner.__doc__ or "")
-            + f"\n\nThis instance is limited to {limit} game actions (NOOP and RESET are free)."
-            + "\n\nCheck `submit_action.remaining()` for how many actions are left."
-        )
-        bounded.__name__ = "submit_action"
-        return bounded
+        return Agentica.bounded_submit_action(inner, limit)
 
     def _make_listener(self):
         """Build a listener constructor, or None if no server is active."""

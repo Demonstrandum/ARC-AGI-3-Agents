@@ -59,7 +59,7 @@ Every action counts. Be efficient -- don't take exploratory actions you've alrea
   over exhaustive sweeps. The action budget is tied to the submit_action function
   itself, not to any agent. Spawning a sub-subagent and passing it the same
   submit_action does NOT reset the budget -- they share the same counter.
-  Check your remaining budget with `submit_action.remaining()`.
+  Check your remaining budget with `submit_action.remaining`.
   If you're running low but close to solving, return to your caller and ask for
   more actions -- your caller can give you a fresh budget and call you again with
   your context intact. Do not waste a near-solution by giving up.
