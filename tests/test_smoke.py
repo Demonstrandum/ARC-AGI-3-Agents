@@ -14,13 +14,13 @@ import numpy as np
 import pytest
 from arcengine import FrameData, GameState
 
-from arcgentica.events import (
+from agents.templates.agentica.logging.events import (
     AgentChunkEvent,
     EventType,
     UsageSummaryEvent,
 )
-from arcgentica.frame import Frame
-from arcgentica.tracker import TokenUsage, UsageTracker
+from agents.templates.agentica.scope.frame import Frame
+from agents.templates.agentica.logging.tracker import TokenUsage, UsageTracker
 
 
 def _make_frame_data(

@@ -55,8 +55,8 @@ class Memories:
                 listener=lambda: AgentListener(FileLogger("logs/", "memory-agent-")),
                 premise=(
                     "You retrieve information from a shared `memories` object. "
-                    "You can call any of its methods: memories.stack, memories.get(i), "
-                    "memories.add(summary, details), memories.evict(i), memories.summaries(). "
+                    "You can call any of its methods: `memories.stack`, `memories.get(i)`, "
+                    "`memories.add(summary, details)`, `memories.evict(i)`, `memories.summaries()`. "
                     "Do not make up information -- only return what the memories support. "
                     "Raise MemoryQueryError if: no memories address the question, the stored "
                     "information is too vague to give a confident answer, or the requested "

@@ -28,3 +28,6 @@ memory.db
 # Agent logs
 visualizer_logs/
 actions_log/
+
+# Scratch / local experiments
+scratch/

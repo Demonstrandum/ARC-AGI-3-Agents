@@ -210,14 +210,17 @@ class Frame:
             arr = np.array(self.grid, dtype=np.int8)
             arr.flags.writeable = False
             object.__setattr__(self, "_grid_array", arr)
-        return self._grid_array  # type: ignore[return-value]
+        assert self._grid_array is not None
+        return self._grid_array
 
     @property
     def width(self) -> int:
+        """Number of columns in the grid."""
         return len(self.grid[0]) if self.grid else 0
 
     @property
     def height(self) -> int:
+        """Number of rows in the grid."""
         return len(self.grid)
 
     @property

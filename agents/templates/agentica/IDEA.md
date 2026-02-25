@@ -1,6 +1,6 @@
 # The idea
 
-What's particular about the **Agentica** "RLM" harness for ARC-AGI-3?
+What's particular about the **Arcgentica** "RLM" harness (built on the [Agentica](https://github.com/symbolica-ai/agentica-server) SDK) for ARC-AGI-3?
 
 **Game-agnostic.** No game-specific prompting. The agent doesn't know what the
 colors mean, what the actions do, or what the win condition is. It figures

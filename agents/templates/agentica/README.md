@@ -1,6 +1,6 @@
-# agentica
+# arcgentica
 
-ARC-AGI-3 agent: orchestrator, frame helpers, WebSocket visualizer, and session logging.
+ARC-AGI-3 agent harness built on the Agentica SDK. Orchestrator, frame helpers, WebSocket visualizer, and session logging.
 
 ## Folder structure
 
@@ -8,7 +8,7 @@ ARC-AGI-3 agent: orchestrator, frame helpers, WebSocket visualizer, and session 
 agentica/
   agent.py              Main agent (orchestrator + submit_action + bounded budget)
   model.py              ModelConfig dataclass and presets (OPUS_4_6, GPT_5_2)
-  prompts.py            GAME_REFERENCE and SYSTEM_PROMPT strings
+  prompts.py            GAME_REFERENCE and premise strings
   colors.py             palette and color name constants
 
   scope/                What the agent sees/uses:

@@ -15,10 +15,10 @@
 Set the `VISUALIZE` environment variable before running the agent:
 
 ```
-VISUALIZE=1 uv run main.py --agent=agentica --game=ls20
+VISUALIZE=1 uv run main.py --agent=arcgentica --game=ls20
 ```
 
-Or pass `visualize=True` when constructing the `Agentica` agent in code.
+Or pass `visualize=True` when constructing the `Arcgentica` agent in code.
 
 ## Frontend & replay
 

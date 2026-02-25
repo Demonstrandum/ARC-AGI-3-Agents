@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run the agentica agent against one or more ARC-AGI-3 games.
+# Run the arcgentica agent against one or more ARC-AGI-3 games.
 #
 # Starts the session manager automatically, runs the agent, then shuts
 # the server down when finished.
@@ -11,7 +11,7 @@
 #   ./scripts/run.sh ls20,vc33,ft09     # multiple games
 #
 # Optional env vars:
-#   AGENT              - Agent name (default: agentica)
+#   AGENT              - Agent name (default: arcgentica)
 #   SM_PORT            - Session manager port (default: 2345)
 #   SESSION_MANAGER_DIR - Path to session manager repo
 #   TAGS               - Comma-separated scorecard tags
@@ -23,7 +23,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-AGENT="${AGENT:-agentica}"
+AGENT="${AGENT:-arcgentica}"
 SM_PORT="${SM_PORT:-2345}"
 GAME_FILTER="${1:-}"
 TAGS="${TAGS:-}"

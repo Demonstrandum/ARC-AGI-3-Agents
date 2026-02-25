@@ -1,5 +1,5 @@
 """
-Game reference and system prompt strings.
+Game reference and premise strings.
 """
 
 from .colors import COLOR_LEGEND
@@ -186,7 +186,7 @@ Remember: do NOT reset to "start clean" or "try a proper approach." If you figur
   not a problem. Resetting wastes every action you already spent."""
 
 
-def system_prompt(model: ModelConfig):
+def premise(model: ModelConfig):
     return f"""You are the top-level ORCHESTRATOR for an ARC-AGI-3 game.
 
 ## YOUR ONLY JOB

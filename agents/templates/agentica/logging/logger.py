@@ -1,5 +1,6 @@
 """
-Custom AgentLogger that pushes all events to the EventServer over WebSocket.
+Implementation of agentica.logging.AgentListener that pushes all agent lifecycle
+events to the EventServer over WebSocket.
 """
 
 from typing import override

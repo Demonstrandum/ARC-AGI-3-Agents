@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from .agent import Agent, Playback
 from .recorder import Recorder
 from .swarm import Swarm
-from .templates.agentica import Agentica
+from .templates.agentica import Arcgentica
 from .templates.langgraph_functional_agent import LangGraphFunc, LangGraphTextOnly
 from .templates.langgraph_random_agent import LangGraphRandom
 from .templates.langgraph_thinking import LangGraphThinking
@@ -31,7 +31,7 @@ for rec in Recorder.list():
 AVAILABLE_AGENTS["reasoningagent"] = ReasoningAgent
 
 __all__ = [
-    "Agentica",
+    "Arcgentica",
     "Swarm",
     "Random",
     "LangGraphFunc",

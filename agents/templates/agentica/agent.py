@@ -1,3 +1,7 @@
+"""
+Arcgentica agent — ARC-AGI-3 harness built on the Agentica SDK.
+"""
+
 import asyncio
 import json
 import logging
@@ -13,14 +17,14 @@ from arcengine import FrameData, GameAction, GameState
 
 from agentica import spawn
 from agentica.logging import AgentListener
-from agents.templates.agentica.model import OPUS_4_6
-
 from agents.agent import Agent
 from agents.tracing import trace_agent_session
+
 from .logging.events import UsageSummaryEvent
 from .logging.logger import EventServer, WsLogger
 from .logging.tracker import UsageTracker
-from .prompts import GAME_REFERENCE, system_prompt
+from .model import OPUS_4_6, ModelConfig
+from .prompts import GAME_REFERENCE, premise
 from .scope.frame import Frame
 from .scope.memories import Memories, Memory
 
@@ -37,19 +41,18 @@ ActionName = Literal[
 ]
 
 
-class Agentica(Agent):
-    """
-    Agent that uses the Agentica SDK with a submit_action tool.
+class Arcgentica(Agent):
+    """ARC-AGI-3 agent harness built on the Agentica SDK."""
 
-    Calls the LLM once -- the LLM drives the game by calling
-    submit_action repeatedly within a single agent.call() invocation.
-    """
-
-    MAX_ACTIONS = 800
-
-    def __init__(self, *args: Any, visualize: bool = False, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        model: ModelConfig = OPUS_4_6,
+        visualize: bool = False,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
-        self.model = OPUS_4_6
+        self.model = model
         self.visualize = visualize or os.environ.get("VISUALIZE", "") == "1"
         self._server: EventServer | None = None
         self._tracker: UsageTracker | None = None
@@ -107,7 +110,7 @@ class Agentica(Agent):
     def choose_action(
         self, frames: list[FrameData], latest_frame: FrameData
     ) -> GameAction:
-        raise NotImplementedError("Agentica agent overrides main()")
+        raise NotImplementedError("Arcgentica agent overrides main()")
 
     def _make_submit_action(self, server: EventServer | None = None):
         """
@@ -136,8 +139,7 @@ class Agentica(Agent):
                 last_frame is not None
                 and raw.levels_completed != last_frame.levels_completed
             ):
-                # Level transition: engine called set_level() which zeroed
-                # _action_count, so the next RESET would be a full_reset.
+                # Level transition
                 has_moves_since_reset = False
             else:
                 has_moves_since_reset = True
@@ -192,8 +194,8 @@ class Agentica(Agent):
                 Frame with the new game state, grid, and available actions.
             """
             if action_name.upper() == "NOOP":
-                # Last frame will not be `None` since RESET is always called before any other action.
-                return last_frame  # type: ignore[return-value]
+                assert last_frame is not None, "NOOP before any RESET"
+                return last_frame
 
             action = GameAction.from_name(action_name)
 
@@ -207,11 +209,7 @@ class Agentica(Agent):
                     f"{action.name} is not available. Available actions: {allowed}"
                 )
 
-            # Block redundant RESETs that would cause a full game reset.
-            # The engine does full_reset when _action_count==0, which is
-            # the case right after any level_reset or level transition.
-            # Since no moves were taken, the level is already clean — just
-            # return the current frame.
+            # Block redundant resets when no moves have been made.
             if action is GameAction.RESET and not has_moves_since_reset:
                 if last_frame is not None:
                     logger.info(f"{self.game_id} - RESET skipped (level already clean)")
@@ -265,7 +263,7 @@ class Agentica(Agent):
     class bounded_submit_action:
         """Callable ``submit_action`` wrapper with an action budget.
 
-        Properties:
+        Attributes:
             remaining: how many game actions are left.
             used: how many game actions have been spent.
             limit: the total budget this was created with.
@@ -326,7 +324,7 @@ class Agentica(Agent):
         """
         if limit is None:
             return inner
-        return Agentica.bounded_submit_action(inner, limit)
+        return Arcgentica.bounded_submit_action(inner, limit)
 
     def _make_listener(self):
         """Build a listener constructor, or None if no server is active."""
@@ -363,9 +361,7 @@ class Agentica(Agent):
         )
 
     async def _run(self) -> None:
-        """
-        Async entry point: spawn agentica agent and let it play.
-        """
+        """Run an agent on a single ARC-AGI-3 game."""
         tracker = UsageTracker()
         self._tracker = tracker
 
@@ -376,8 +372,6 @@ class Agentica(Agent):
             self._server = server
         submit_action, history = self._make_submit_action(server=server)
 
-        # TODO: future idea --- also allow restricting to a subset of actions, e.g. only ACTION1-ACTION4.
-        #       determine if this is useful for any of the games.
         def make_bounded_submit_action(limit: int | None):
             """
             Create a new ``submit_action`` function, optionally with a hard action budget.
@@ -394,7 +388,7 @@ class Agentica(Agent):
             Args:
                 limit: Max game actions (ACTION1-ACTION6) allowed, or None for unlimited.
             """
-            return Agentica._make_bounded_submit_action(submit_action, limit)
+            return Arcgentica._make_bounded_submit_action(submit_action, limit)
 
         # Double RESET guarantees a completely fresh game
         initial_raw = self.take_action(GameAction.RESET)
@@ -405,7 +399,7 @@ class Agentica(Agent):
 
         orchestrator = await spawn(
             model=self.model.main_agent_model,
-            premise=system_prompt(self.model),
+            premise=premise(self.model),
             reasoning_effort=self.model.reasoning_effort,
             listener=self._make_listener(),
             scope={
@@ -417,24 +411,24 @@ class Agentica(Agent):
             },
         )
 
-        remaining = self.MAX_ACTIONS - self.action_counter
         actions = ", ".join(initial_frame.available_actions)
 
         memories = Memories(model=self.model.subagent_model)
 
         return await orchestrator.call(
             None,
-            f"You are playing the game `{self.game_id}`. "
-            f"Level {initial_frame.levels_completed}/{initial_frame.win_levels}. "
-            f"{remaining} actions remaining.\n"
-            f"Available actions for this level: {actions}\n\n"
-            "You have a shared `memories` database — pass it to every subagent "
-            "so they can read prior knowledge and write new discoveries as they go. "
-            "This persists across agent lifetimes, so use it as the primary way to "
-            "accumulate and transfer knowledge.\n\n"
-            "Take a moment to plan your approach before spawning any agents. "
-            "When ready, spawn an explorer and give it a bounded submit_action, "
-            "`initial_frame`, `memories`, and `GAME_REFERENCE`.",
+            f"""You are playing the game `{self.game_id}`. \
+Level {initial_frame.levels_completed}/{initial_frame.win_levels}. \
+Available actions for this level: {actions}
+
+You have a shared `memories` database — pass it to every subagent \
+so they can read prior knowledge and write new discoveries as they go. \
+This persists across agent lifetimes, so use it as the primary way to \
+accumulate and transfer knowledge.
+
+Take a moment to plan your approach before spawning any agents. \
+When ready, spawn an explorer and give it a bounded submit_action, \
+`initial_frame`, `memories`, and `GAME_REFERENCE`.""",
             initial_frame=initial_frame,
             make_bounded_submit_action=make_bounded_submit_action,
             history=history,

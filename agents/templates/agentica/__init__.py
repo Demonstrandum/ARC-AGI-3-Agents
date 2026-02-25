@@ -1,3 +1,3 @@
-from .agent import Agentica
+from .agent import Arcgentica
 
-__all__ = ["Agentica"]
+__all__ = ["Arcgentica"]
