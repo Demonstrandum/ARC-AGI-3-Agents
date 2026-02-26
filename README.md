@@ -2,7 +2,7 @@
 
 ## Arcgentica (Symbolica)
 
-This is a fork. We added **Arcgentica**, an ARC-AGI-3 agent harness built on the [Agentica](https://github.com/symbolica-ai/agentica-server) SDK. See [`SYMBOLICA_README.md`](SYMBOLICA_README.md) for details.
+This is [Symbolica's](https://symbolica.ai) fork. We added **Arcgentica**, an ARC-AGI-3 agent harness built on the [Agentica](https://github.com/symbolica-ai/agentica-server) SDK. See [`SYMBOLICA_README.md`](SYMBOLICA_README.md) for setup, running, and winning replay logs.
 
 ---
 

@@ -12,8 +12,11 @@
 # IDE settings
 .vscode/
 
-# Recordings
+# Recordings (winning runs are excluded below and tracked via LFS)
 recordings/*.recording.jsonl
+!recordings/ft09-9ab2447a.agentica.6e764699-ea38-4804-9e81-32bcdae6a003.recording.jsonl
+!recordings/ls20-cb3b57cc.agentica.c81f9f4f-3b73-4611-8a31-5898a453f47f.recording.jsonl
+!recordings/vc33-9851e02b.agentica.91c40838-ff77-481c-b8aa-e509c6d61091.recording.jsonl
 tests/recordings/*.recording.jsonl
 tests/recordings/not-a-recording.txt
 
@@ -24,9 +27,11 @@ plots/
 # Long-term memory
 memory.db
 
-
-# Agent logs
-visualizer_logs/
+# Agent logs (winning visualizer logs are excluded below and tracked via LFS)
+visualizer_logs/*
+!visualizer_logs/ft09-9ab2447a_20260220_121159.jsonl
+!visualizer_logs/ls20-cb3b57cc_20260217_172701.jsonl
+!visualizer_logs/vc33-9851e02b_20260219_161012.jsonl
 actions_log/
 
 # Scratch / local experiments
