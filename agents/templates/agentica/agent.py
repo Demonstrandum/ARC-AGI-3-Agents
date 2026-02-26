@@ -459,5 +459,5 @@ When ready, spawn an explorer and give it a bounded submit_action, \
             self._write_usage()
             self._close_action_log()
             if self._server is not None:
-                self._server._close_log()
+                self._server.close_log()
             self.cleanup()

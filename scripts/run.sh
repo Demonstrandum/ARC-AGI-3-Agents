@@ -13,7 +13,7 @@
 # Optional env vars:
 #   AGENT              - Agent name (default: arcgentica)
 #   SM_PORT            - Session manager port (default: 2345)
-#   SESSION_MANAGER_DIR - Path to session manager repo
+#   AGENTICA_SERVER_DIR - Path to agentica-server checkout
 #   TAGS               - Comma-separated scorecard tags
 #   NO_SERVER          - Set to 1 to skip starting the session manager
 #                        (if you already have one running)

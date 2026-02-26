@@ -27,6 +27,9 @@ plots/
 # Long-term memory
 memory.db
 
+# Runtime log
+logs.log
+
 # Agent logs (winning visualizer logs are excluded below and tracked via LFS)
 visualizer_logs/*
 !visualizer_logs/ft09-9ab2447a_20260220_121159.jsonl

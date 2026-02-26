@@ -100,9 +100,10 @@ class EventServer:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
-        self._close_log()
+        self.close_log()
 
-    def _close_log(self) -> None:
+    def close_log(self) -> None:
+        """Flush and close the JSONL session log file."""
         if self._log_file is not None:
             self._log_file.close()
             print(f"{_TAG} Session log saved to {_UNDERLINE}{self._log_path}{_RESET}")

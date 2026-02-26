@@ -36,9 +36,6 @@ dev = [
 agentops = [
     "agentops>=0.4.18",
 ]
-visualize = [
-    "websockets>=15.0",
-]
 
 [tool.mypy]
 strict = true

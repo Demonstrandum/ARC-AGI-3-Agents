@@ -168,9 +168,9 @@ class TestUsageTracker:
         t.append_reasoning(1, "output_text", "thinking...\n")
         result = t.drain_reasoning()
         assert result is not None
-        assert result["agent_id"] == 1
         assert "x = 1" in result["text"]
         assert "thinking" in result["text"]
+        assert "[agent 1]" in result["text"]
 
     def test_drain_empty(self):
         t = UsageTracker()

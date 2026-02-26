@@ -7,8 +7,8 @@
 #   INFERENCE_URL       - Inference endpoint (default: https://api.anthropic.com/v1/messages)
 #
 # Optional env vars:
-#   SESSION_MANAGER_DIR - Path to the session manager repo
-#                         (default: ../agentica-framework/session_manager)
+#   AGENTICA_SERVER_DIR - Path to the agentica-server checkout
+#                         (default: ../agentica-server)
 #   SM_PORT             - Port to run on (default: 2345)
 #
 set -euo pipefail
@@ -23,7 +23,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     set +a
 fi
 
-SM_DIR="${SESSION_MANAGER_DIR:-$(dirname "$PROJECT_DIR")/agentica-framework/session_manager}"
+SM_DIR="${AGENTICA_SERVER_DIR:-$(dirname "$PROJECT_DIR")/agentica-server}"
 SM_PORT="${SM_PORT:-2345}"
 INFERENCE_ENDPOINT="${INFERENCE_URL:-https://api.anthropic.com/v1/messages}"
 
@@ -34,7 +34,7 @@ fi
 
 if [[ ! -d "$SM_DIR" ]]; then
     echo "ERROR: Session manager directory not found: $SM_DIR" >&2
-    echo "Set SESSION_MANAGER_DIR to the correct path." >&2
+    echo "Set AGENTICA_SERVER_DIR to the correct path." >&2
     exit 1
 fi
 

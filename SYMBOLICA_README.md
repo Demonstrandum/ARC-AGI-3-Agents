@@ -35,7 +35,7 @@ cp .env.example .env
 AGENTICA_API_KEY=your_key_here
 ```
 
-**Option B: Self-hosted agentica-server** -- run the server locally and point at your own inference provider.
+**Option B: Self-hosted agentica-server** -- clone and run the server locally, pointing at your own inference provider.
 
 The server supports multiple providers:
 
@@ -48,6 +48,8 @@ The server supports multiple providers:
 In a separate terminal:
 
 ```bash
+git clone https://github.com/symbolica-ai/agentica-server.git
+cd agentica-server
 uv run src/application/main.py --disable-otel \
   --inference-token=$ANTHROPIC_API_KEY \
   --inference-endpoint https://api.anthropic.com/v1/messages \
@@ -100,6 +102,15 @@ See [`agents/templates/agentica/README.md`](agents/templates/agentica/README.md)
 ```bash
 uv run python -m pytest tests/test_smoke.py -v
 ```
+
+## Scripts
+
+`scripts/` contains optional automation for cloud/CI runs:
+
+- **`scripts/server.sh`** — starts the agentica-server. Expects `INFERENCE_API_KEY` to be set. Defaults to `../agentica-server` for the server checkout (override with `AGENTICA_SERVER_DIR`).
+- **`scripts/run.sh`** — starts the server, runs the agent against one or more games, then cleans up. Usage: `./scripts/run.sh ls20` or `./scripts/run.sh ls20,vc33,ft09`.
+
+These are not required for normal use — see [Running the agent](#running-the-agent) above.
 
 ## Logs and Replay
 

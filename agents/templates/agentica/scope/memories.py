@@ -89,7 +89,7 @@ class Memories:
         Use `return_type` and `query` to structure how and what information to retrieve.
 
         Example:
-            memories.query(list[int], "What what triggers X to happen? Gice me a list of indices for the corresponding memory entries.")
+            memories.query(list[int], "What triggers X to happen? Give me a list of indices for the corresponding memory entries.")
             memories.query(str, "What is the premise of the level X?")
             memories.query(Memory, "What happens when I take action X?")
             memories.query(list[Memory], "Give me the last 3 memories pertaining to level X.")
